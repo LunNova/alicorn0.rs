@@ -1,0 +1,1 @@
+{ { "let", "host-string-wrap", "=", "intrinsic", { elements = { "return terms.strict_value.host_string_type" }, kind = "string" }, ":", { "wrapped", "host-type" } }, { "let", "host-string", "=", { "unwrap", "host-string-wrap" } } }

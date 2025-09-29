@@ -1,0 +1,1 @@
+{ { "let", "footype", "=", "record", { "x", ":", "host-number" } }, { "let", "foo", "=", "the", "footype", { "record-of", { "x", "=", { elements = { "x" }, kind = "string" } } } } }

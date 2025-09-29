@@ -1,0 +1,21 @@
+[package]
+name = "alicorn-format"
+version = "0.1.0"
+edition = "2024"
+authors = ["Fundament Software SPC <https://fundament.software>"]
+license = "Apache-2.0"
+description = "A parser for the Alicorn language format"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+ustr = "1.1.0"
+argh = "0.1"
+
+[[bin]]
+name = "format-harness"
+path = "format-harness.rs"
+
+[dev-dependencies]
+pretty_assertions = "1.3.0"

@@ -1,0 +1,1 @@
+{ { "curly-list", "%-", "call", { "alicorn::func_decl", { elements = { "public func" }, kind = "string" }, "func", 0 }, "%" } }

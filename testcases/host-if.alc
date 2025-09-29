@@ -1,0 +1,29 @@
+let host-if-2 = unwrap
+	intrinsic
+		""""
+			return U.notail(evaluator.gen_base_operator("#host-if-2", function(result, c2, a1, subject, consequent, alternate)
+				return U.notail(terms.typed_term.host_if(subject, consequent, alternate))
+			end, "result", "c2", "a1", "subject", "consequent", "alternate"))
+		:
+		wrapped(forall (
+				result     : host-type,
+				c2         : host-type,
+				a1         : host-type,
+				subject    : host-bool,
+				consequent : host-if(subject, result, c2),
+				alternate  : host-if(subject, a1, result))
+			->
+			(r : result))
+
+let host-true = intrinsic "return true" : host-bool
+let host-false = intrinsic "return false" : host-bool
+
+let host-if-test = lambda (
+		b : host-bool,
+		x : host-if(b, host-string, host-unit))
+	let default = intrinsic "return 'default'" : host-if(b, host-string, host-string)
+	let foo = host-if-2(host-string, host-unit, host-string, b, x, default)
+	the host-string foo
+
+host-if-test(host-true, "foobar")
+host-if-test(host-false, host-nil)

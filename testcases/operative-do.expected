@@ -1,0 +1,1 @@
+{ { "let", "foo", "=", { elements = { "baz" }, kind = "string" } }, { "let", "x", "=", "do", { "let", "foo", "=", { elements = { "foo" }, kind = "string" } }, { "let", { "foobar" }, "=", { "host-string-concat", "foo", { elements = { "bar" }, kind = "string" } } }, "foobar" }, { "let", { "foobarbaz" }, "=", { "host-string-concat", "x", "foo" } }, "foobarbaz" }

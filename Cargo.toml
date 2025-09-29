@@ -1,0 +1,12 @@
+[workspace]
+members = [
+    "format",
+]
+#default-members = [
+#    "format"
+#]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85.0"

@@ -1,0 +1,27 @@
+let host-matcher-reducible =
+	lambda_implicit (userdata       : host-type)
+		lambda (
+				storage        : tuple-desc-type(host-type),
+				result2        : tuple-desc-type(host-type),
+				result         : tuple-desc-type(host-type),
+				red            : reducer-type(storage, result2),
+				s              : host-tuple-type(storage),
+				accept-handler : reducible-handler-type(userdata, result2, result))
+			# FIXME: this function resolution breaks alicorn, which is extremely very super bad
+			# let c = get-reducible-constructor(userdata, storage, result2, result, red)
+			let inner = intrinsic "return function(r) return r end" :
+				host-func-type ((r : reducer-type(storage, result2))) -> ((c : reducible-constructor-type(userdata, storage, result2, result)))
+			let (c) = inner(red)
+
+			let accept-handler-type = reducible-handler-type(userdata, result2, result)
+			let accept-handler-desc = tuple-desc-singleton(host-type, accept-handler-type)
+			# let red-param-desc = tuple-desc-concat(host-type, accept-handler-desc, storage)
+			# let red-result-desc = tuple-desc-singleton(host-type, host-matcher(userdata, result))
+
+			let accept-handler-tuple = host-tuple-of(accept-handler-desc)(accept-handler)
+			let red-param = host-tuple-concat(accept-handler-desc, storage, accept-handler-tuple, s)
+
+			# look ma, no intrinsics!
+			let (m) = apply(c, red-param)
+			m
+# FIXME: implicit here doesn't work
