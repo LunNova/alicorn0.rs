@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use imbl::Vector;
 use std::fmt;
 use ustr::Ustr;
 
@@ -33,6 +34,17 @@ impl fmt::Display for BraceType {
 pub type Indent = i16;
 pub type FormatList = Vec<Element>;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ImmElement {
+	Symbol(Ustr),
+	Number(f64),
+	List(ImmFormatList),
+	Comment(String),
+	String(String),
+}
+
+pub type ImmFormatList = Vector<ImmElement>;
+
 pub use listify::ListifyError;
 
 /// Parse Alicorn format text into nested lists.
@@ -45,4 +57,19 @@ pub fn format(input: &str) -> Result<FormatList, Box<dyn std::error::Error>> {
 	let lexed = lexer::lex(input).map_err(|_| "Lexing failed")?;
 	let formatted = listify::listify(lexed)?;
 	Ok(formatted)
+}
+
+/// Convert a Vec-based Element tree to an imbl-based ImmElement tree
+pub fn immutify(elements: Vec<Element>) -> ImmFormatList {
+	elements.into_iter().map(immutify_element).collect()
+}
+
+fn immutify_element(element: Element) -> ImmElement {
+	match element {
+		Element::Symbol(s) => ImmElement::Symbol(s),
+		Element::Number(n) => ImmElement::Number(n),
+		Element::List(list) => ImmElement::List(immutify(list)),
+		Element::Comment(c) => ImmElement::Comment(c),
+		Element::String(s) => ImmElement::String(s),
+	}
 }

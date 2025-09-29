@@ -12,6 +12,7 @@ path = "lib.rs"
 [dependencies]
 ustr = "1.1.0"
 argh = "0.1"
+imbl = "3.0"
 
 [[bin]]
 name = "format-harness"
