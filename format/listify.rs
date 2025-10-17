@@ -3,6 +3,7 @@ use crate::{
 	Indent,
 	lexer::{self, Item},
 };
+use imbl::{Vector, vector};
 use std::sync::LazyLock;
 use ustr::Ustr;
 
@@ -22,7 +23,7 @@ enum ListType {
 
 pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError> {
 	if lines.is_empty() {
-		return Ok(vec![]);
+		return Ok(Vector::new());
 	}
 
 	let mut line_iter = lines.into_iter().peekable();
@@ -33,7 +34,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 		(-1, ListType::Naked),
 	];
 	// Starts with partial list for the secret -1 indent list we're pretending exists to simplify the logic :3
-	let mut partials: Vec<Vec<Element>> = vec![vec![]];
+	let mut partials: Vec<Vector<Element>> = vec![Vector::new()];
 	let mut requires_continuation = false;
 	let mut can_chain = false;
 	loop {
@@ -85,7 +86,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 				// When in a braced list and line starts with backslash, start a new naked list context at this depth
 				if starts_with_backslash {
 					list_types.push((line_indent, ListType::Naked));
-					partials.push(vec![]);
+					partials.push(Vector::new());
 				}
 			}
 			ListType::Naked => {
@@ -98,7 +99,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 					if !requires_continuation && !starts_with_backslash {
 						// Create a new nested list
 						list_types.push((line_indent, ListType::Naked));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 					}
 					// If requires_continuation or starts_with_backslash, we continue in the same list
 				} else if line_indent == list_indent {
@@ -118,10 +119,10 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 
 						if completed_list.len() == 1 {
 							// Lonely token rule: If a list has only one element, don't wrap it
-							parent_list.push(completed_list.into_iter().next().unwrap());
+							parent_list.push_back(completed_list.into_iter().next().unwrap());
 						} else if !completed_list.is_empty() {
 							// Otherwise wrap in a list
-							parent_list.push(Element::List(completed_list));
+							parent_list.push_back(Element::List(completed_list));
 						}
 
 						// Pop the list type as we've completed it
@@ -133,15 +134,15 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 
 						if completed_list.len() == 1 {
 							// Lonely token rule
-							parent_list.push(completed_list.into_iter().next().unwrap());
+							parent_list.push_back(completed_list.into_iter().next().unwrap());
 						} else if !completed_list.is_empty() {
-							parent_list.push(Element::List(completed_list));
+							parent_list.push_back(Element::List(completed_list));
 						}
 
 						// Pop and push to maintain the same indent level but start a new list
 						list_types.pop();
 						list_types.push((line_indent, ListType::Naked));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 					}
 				} else {
 					// We've decreased indent, so close all lists down to this indent level
@@ -155,7 +156,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 							// Lonely token rule
 							parent_list.extend(completed_list);
 						} else if !completed_list.is_empty() {
-							parent_list.push(Element::List(completed_list));
+							parent_list.push_back(Element::List(completed_list));
 						}
 
 						list_types.pop();
@@ -168,7 +169,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 					} else {
 						// Start a new list at this level
 						list_types.push((line_indent, ListType::Naked));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 					}
 				}
 			}
@@ -186,7 +187,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 					// Lonely token rule
 					parent_list.extend(completed_list);
 				} else if !completed_list.is_empty() {
-					parent_list.push(Element::List(completed_list));
+					parent_list.push_back(Element::List(completed_list));
 				}
 
 				list_types.pop();
@@ -196,7 +197,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 
 		// Process entries in this line
 		let mut current_list = partials.last_mut().unwrap();
-		let mut temp_elements = vec![];
+		let mut temp_elements = Vector::new();
 
 		// Reset continuation flag
 		requires_continuation = false;
@@ -214,73 +215,76 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 						// OpenBrace, Sym, Comma, ...
 
 						// Add all accumulated elements to the current list
-						current_list.append(&mut temp_elements);
+						let temp = std::mem::replace(&mut temp_elements, Vector::new());
+						current_list.append(temp);
 
 						// Start a new braced list from function call
 						list_types.push((line_indent, ListType::BracedFromFunctionCall(*brace_type)));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 						current_list = partials.last_mut().unwrap();
 						match brace_type {
 							BraceType::Paren => {}
 							BraceType::Square => {
-								temp_elements.push(Element::Symbol(*SQUARE_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*SQUARE_LIST_COMMA));
 							}
 							BraceType::Curly => {
-								temp_elements.push(Element::Symbol(*CURLY_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*CURLY_LIST_COMMA));
 							}
 						}
 
-						temp_elements.push(Element::Symbol(symbol));
-						temp_elements.push(Element::Symbol(*COMMA));
+						temp_elements.push_back(Element::Symbol(symbol));
+						temp_elements.push_back(Element::Symbol(*COMMA));
 						line_iter.next();
 					} else {
-						temp_elements.push(Element::Symbol(symbol));
+						temp_elements.push_back(Element::Symbol(symbol));
 					}
 				}
 				Item::OpenBrace(brace_type) => {
 					// Check if we can chain (last element was a function call result)
 					if can_chain && !current_list.is_empty() {
 						// Pop the last element (the function to call)
-						let function_element = current_list.pop().unwrap();
+						let function_element = current_list.pop_back().unwrap();
 
 						// Add all accumulated elements to the current list
-						current_list.append(&mut temp_elements);
+						let temp = std::mem::replace(&mut temp_elements, Vector::new());
+						current_list.append(temp);
 
 						// Start a new function call braced list
 						list_types.push((line_indent, ListType::BracedFromFunctionCall(brace_type)));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 						current_list = partials.last_mut().unwrap();
 
 						// Add the function and comma for function call syntax
 						match brace_type {
 							BraceType::Paren => {}
 							BraceType::Square => {
-								temp_elements.push(Element::Symbol(*SQUARE_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*SQUARE_LIST_COMMA));
 							}
 							BraceType::Curly => {
-								temp_elements.push(Element::Symbol(*CURLY_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*CURLY_LIST_COMMA));
 							}
 						}
 
-						temp_elements.push(function_element);
-						temp_elements.push(Element::Symbol(*COMMA));
+						temp_elements.push_back(function_element);
+						temp_elements.push_back(Element::Symbol(*COMMA));
 
 						can_chain = false;
 					} else {
 						// Add all accumulated elements to the current list
-						current_list.append(&mut temp_elements);
+						let temp = std::mem::replace(&mut temp_elements, Vector::new());
+						current_list.append(temp);
 
 						// Start a new regular braced list
 						list_types.push((line_indent, ListType::Braced(brace_type)));
-						partials.push(vec![]);
+						partials.push(Vector::new());
 						current_list = partials.last_mut().unwrap();
 						match brace_type {
 							BraceType::Paren => {}
 							BraceType::Square => {
-								temp_elements.push(Element::Symbol(*SQUARE_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*SQUARE_LIST_COMMA));
 							}
 							BraceType::Curly => {
-								temp_elements.push(Element::Symbol(*CURLY_LIST_COMMA));
+								temp_elements.push_back(Element::Symbol(*CURLY_LIST_COMMA));
 							}
 						}
 
@@ -289,7 +293,8 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 				}
 				Item::CloseBrace(brace_type) => {
 					// First add any temporary elements
-					current_list.append(&mut temp_elements);
+					let temp = std::mem::replace(&mut temp_elements, Vector::new());
+					current_list.append(temp);
 
 					// Ensure we're closing the right type of brace
 					if let Some((_, list_type)) = list_types.last() {
@@ -308,7 +313,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 						let has_commas = completed_list.iter().any(|x| matches!(x, Element::Symbol(s) if *s == *COMMA));
 						let has_semicolons = completed_list.iter().any(|x| matches!(x, Element::Symbol(s) if *s == *SEMICOLON));
 						let has_special_split = completed_list
-							.first()
+							.front()
 							.map(|x| if let Element::Symbol(sym) = x { sym.ends_with(',') } else { false })
 							.unwrap_or(false);
 						if has_commas || has_semicolons {
@@ -321,18 +326,18 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 							//   If size == 1 add the 1 elem in it directly to empty list
 							//   If size > 1 wrap all in an Element::List and add to list
 							// Create a new empty list to hold the processed chunks
-							let mut processed_list = Vec::new();
+							let mut processed_list = Vector::new();
 
 							if has_special_split {
 								if let Element::Symbol(special_split) = completed_list.remove(0) {
-									processed_list.push(Element::Symbol(special_split.trim_end_matches(',').to_string().into()));
+									processed_list.push_back(Element::Symbol(special_split.trim_end_matches(',').to_string().into()));
 								} else {
 									panic!("Should be unreachable");
 								}
 							}
 
 							// Keep track of current chunk elements
-							let mut current_chunk = Vec::new();
+							let mut current_chunk = Vector::new();
 
 							// Process the list items
 							for item in completed_list {
@@ -341,25 +346,25 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 										// Process the current chunk
 										if current_chunk.len() == 1 && *s == *COMMA {
 											// For single items, add directly without wrapping
-											processed_list.push(current_chunk.pop().unwrap());
+											processed_list.push_back(current_chunk.pop_back().unwrap());
 										} else if !current_chunk.is_empty() {
 											// For multiple items, wrap in a list
-											processed_list.push(Element::List(current_chunk));
-											current_chunk = Vec::new();
+											processed_list.push_back(Element::List(current_chunk));
+											current_chunk = Vector::new();
 										}
 										continue;
 									}
 								}
 								// Add this item to the current chunk
-								current_chunk.push(item);
+								current_chunk.push_back(item);
 							}
 
 							// Process the final chunk
 							if has_commas {
 								if current_chunk.len() == 1 {
-									processed_list.push(current_chunk.pop().unwrap());
+									processed_list.push_back(current_chunk.pop_back().unwrap());
 								} else if !current_chunk.is_empty() {
-									processed_list.push(Element::List(current_chunk));
+									processed_list.push_back(Element::List(current_chunk));
 								}
 							} else if has_semicolons {
 								// For semicolons, tail elements go directly to top level
@@ -375,7 +380,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 							}
 						}
 						let parent_list = partials.last_mut().unwrap();
-						parent_list.push(Element::List(completed_list));
+						parent_list.push_back(Element::List(completed_list));
 
 						// Set chaining flag if this was a function call, otherwise clear it
 						can_chain = is_function_call;
@@ -390,7 +395,7 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 					// Only valid in braced lists
 					if let Some((_, list_type)) = list_types.last() {
 						match list_type {
-							ListType::Braced(_) | ListType::BracedFromFunctionCall(_) => temp_elements.push(Element::Symbol(*COMMA)),
+							ListType::Braced(_) | ListType::BracedFromFunctionCall(_) => temp_elements.push_back(Element::Symbol(*COMMA)),
 							_ => return Err(ListifyError::CommaInNakedList),
 						}
 					} else {
@@ -402,11 +407,11 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 					if let Some((_, ListType::Naked)) = list_types.last() {
 						// Add accumulated elements as a sublist
 						if !temp_elements.is_empty() {
-							current_list.push(Element::List(temp_elements.clone()));
+							current_list.push_back(Element::List(temp_elements.clone()));
 							temp_elements.clear();
 						}
 					} else {
-						temp_elements.push(Element::Symbol(*SEMICOLON))
+						temp_elements.push_back(Element::Symbol(*SEMICOLON))
 					}
 				}
 				Item::Backslash => {
@@ -425,15 +430,15 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 				}
 				Item::String(sym) => {
 					can_chain = false;
-					temp_elements.push(Element::String(sym));
+					temp_elements.push_back(Element::String(sym));
 				}
 				Item::Comment(com) => {
 					can_chain = false;
-					temp_elements.push(Element::Comment(com));
+					temp_elements.push_back(Element::Comment(com));
 				}
 				Item::Number(n) => {
 					can_chain = false;
-					temp_elements.push(Element::Number(n));
+					temp_elements.push_back(Element::Number(n));
 				}
 			}
 		}
@@ -442,13 +447,14 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 		if !temp_elements.is_empty() {
 			if temp_elements.len() == 1 && requires_continuation {
 				// If we have a single element and continuation, don't wrap
-				current_list.push(temp_elements.pop().unwrap());
+				current_list.push_back(temp_elements.pop_back().unwrap());
 			} else if !requires_continuation {
 				// If no continuation and multiple elements, add them all
-				current_list.append(&mut temp_elements);
+				let temp = std::mem::replace(&mut temp_elements, Vector::new());
+				current_list.append(temp);
 			} else {
 				// With continuation and multiple elements, add as a list
-				current_list.push(Element::List(temp_elements.clone()));
+				current_list.push_back(Element::List(temp_elements.clone()));
 				temp_elements.clear();
 			}
 		}
@@ -507,7 +513,7 @@ mod test {
 	macro_rules! exp {
 			// Handle nested lists with [] syntax
 			([ $($inner:tt),* ]) => {
-					Element::List(vec![ $( exp!($inner) ),* ])
+					Element::List(vector![ $( exp!($inner) ),* ])
 			};
 			// Handle string literals with s prefix
 			(s $s:expr) => {
@@ -541,16 +547,16 @@ mod test {
 	// Used to specify expected result in format tests
 	macro_rules! format_list {
 			([ $($elem:tt),* ]) => {
-					vec![Element::List(vec![ $( exp!($elem) ),* ])]
+					vector![Element::List(vector![ $( exp!($elem) ),* ])]
 			};
 			([ $($elem1:tt),* ], [ $($elem2:tt),* ] $(, [ $($rest:tt),* ])* ) => {
 					{
-							let mut result = vec![
-									vec![ $( exp!($elem1) ),* ],
-									vec![ $( exp!($elem2) ),* ]
+							let mut result = vector![
+									vector![ $( exp!($elem1) ),* ],
+									vector![ $( exp!($elem2) ),* ]
 							];
 							$(
-									result.push(vec![ $( exp!($rest) ),* ]);
+									result.push_back(vector![ $( exp!($rest) ),* ]);
 							)*
 							result
 					}
@@ -682,7 +688,7 @@ lambda ((x : i32) (y : i32) (z : some_complicated_type(x, y)))
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("my_var"),
 				symbol!("="),
@@ -722,14 +728,14 @@ lambda ((x : i32) (y : i32) (z : some_complicated_type(x, y)))
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![
-				Element::List(vec![
+			vector![
+				Element::List(vector![
 					symbol!("let"),
 					symbol!("my_var"),
 					symbol!("="),
 					Element::String("this is a string".to_string())
 				]),
-				Element::List(vec![
+				Element::List(vector![
 					symbol!("let"),
 					symbol!("my_var2"),
 					symbol!("="),
@@ -758,9 +764,9 @@ lambda ((x : i32) (y : i32) (z : some_complicated_type(x, y)))
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("print"),
-				Element::List(vec![symbol!("a"), symbol!("+"), symbol!("b"),])
+				Element::List(vector![symbol!("a"), symbol!("+"), symbol!("b"),])
 			])]
 		)
 	}
@@ -775,10 +781,10 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("print"),
 				Element::String("fmt".to_string()),
-				Element::List(vec![symbol!("a"), symbol!("+"), symbol!("b"),])
+				Element::List(vector![symbol!("a"), symbol!("+"), symbol!("b"),])
 			])]
 		)
 	}
@@ -790,7 +796,10 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![Element::List(vec![symbol!("foo"), symbol!("a")]), symbol!("b")])]
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("foo"), symbol!("a")]),
+				symbol!("b")
+			])]
 		)
 	}
 
@@ -801,8 +810,8 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![symbol!("host-tuple-of"), symbol!("accept-handler-desc")]),
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("host-tuple-of"), symbol!("accept-handler-desc")]),
 				symbol!("accept-handler")
 			])]
 		)
@@ -815,8 +824,8 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![Element::List(vec![symbol!("foo"), symbol!("a")]), symbol!("b")]),
+			vector![Element::List(vector![
+				Element::List(vector![Element::List(vector![symbol!("foo"), symbol!("a")]), symbol!("b")]),
 				symbol!("c")
 			])]
 		)
@@ -829,8 +838,8 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![symbol!("make-adder"), Element::Number(5.0), symbol!("x")]),
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("make-adder"), Element::Number(5.0), symbol!("x")]),
 				Element::Number(3.0),
 				symbol!("y")
 			])]
@@ -854,7 +863,7 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![symbol!("let"), symbol!("my_var"), symbol!("="),])]
+			vector![Element::List(vector![symbol!("let"), symbol!("my_var"), symbol!("="),])]
 		)
 	}
 
@@ -868,7 +877,7 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("my_var"),
 				symbol!("="),
@@ -888,7 +897,7 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("my_var"),
 				symbol!("="),
@@ -906,9 +915,9 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("print"),
-				Element::List(vec![symbol!("a"), symbol!("+"), symbol!("b"),])
+				Element::List(vector![symbol!("a"), symbol!("+"), symbol!("b"),])
 			])]
 		)
 	}
@@ -936,11 +945,11 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("config"),
 				symbol!("="),
-				Element::List(vec![
+				Element::List(vector![
 					symbol!("curly-list"),
 					symbol!("name"),
 					symbol!(":"),
@@ -973,11 +982,11 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("items"),
 				symbol!("="),
-				Element::List(vec![symbol!("square-list"), symbol!("a"), symbol!("b"), symbol!("c"),])
+				Element::List(vector![symbol!("square-list"), symbol!("a"), symbol!("b"), symbol!("c"),])
 			])]
 		)
 	}
@@ -1001,9 +1010,9 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![symbol!("square-list"), symbol!("a"),]),
-				Element::List(vec![symbol!("curly-list"), symbol!("b"),]),
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("square-list"), symbol!("a"),]),
+				Element::List(vector![symbol!("curly-list"), symbol!("b"),]),
 			])]
 		)
 	}
@@ -1021,7 +1030,7 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("x"),
 				symbol!("="),
@@ -1044,7 +1053,7 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("let"),
 				symbol!("x"),
 				symbol!("="),
@@ -1089,9 +1098,9 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![symbol!("a"), symbol!("b"),]),
-				Element::List(vec![symbol!("c")]),
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("a"), symbol!("b"),]),
+				Element::List(vector![symbol!("c")]),
 			])]
 		)
 	}
@@ -1119,9 +1128,9 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
-				Element::List(vec![symbol!("a"), symbol!("b"),]),
-				Element::List(vec![symbol!("c"), symbol!("d"),]),
+			vector![Element::List(vector![
+				Element::List(vector![symbol!("a"), symbol!("b"),]),
+				Element::List(vector![symbol!("c"), symbol!("d"),]),
 				symbol!("e"),
 			])]
 		)
@@ -1171,17 +1180,17 @@ print("fmt", a + b)
 		dbg!(&listified);
 		assert_eq!(
 			listified,
-			vec![
-				Element::List(vec![
-					Element::List(vec![symbol!("a"), symbol!("b"),]),
-					Element::List(vec![symbol!("c"), symbol!("d"),]),
+			vector![
+				Element::List(vector![
+					Element::List(vector![symbol!("a"), symbol!("b"),]),
+					Element::List(vector![symbol!("c"), symbol!("d"),]),
 					symbol!("e"),
 				]),
-				Element::List(vec![
+				Element::List(vector![
 					symbol!("square-list"),
-					Element::List(vec![symbol!("a"), symbol!("b"),]),
-					Element::List(vec![symbol!("c"), symbol!("d"),]),
-					Element::List(vec![symbol!("e")]),
+					Element::List(vector![symbol!("a"), symbol!("b"),]),
+					Element::List(vector![symbol!("c"), symbol!("d"),]),
+					Element::List(vector![symbol!("e")]),
 				])
 			]
 		)
@@ -1205,7 +1214,10 @@ print("fmt", a + b)
 			],
 		)];
 		let listified = listify(lexed).unwrap();
-		assert_eq!(listified, vec![Element::List(vec![symbol!("a"), symbol!("b"), symbol!("c"),])])
+		assert_eq!(
+			listified,
+			vector![Element::List(vector![symbol!("a"), symbol!("b"), symbol!("c"),])]
+		)
 	}
 
 	#[test]
@@ -1233,11 +1245,11 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("square-list"),
 				symbol!("1"),
 				symbol!("2"),
-				Element::List(vec![symbol!("1"), symbol!("+"), symbol!("2"),]),
+				Element::List(vector![symbol!("1"), symbol!("+"), symbol!("2"),]),
 			])]
 		)
 	}
@@ -1263,9 +1275,9 @@ print("fmt", a + b)
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![Element::List(vec![
-				Element::List(vec![symbol!("a")]),
-				Element::List(vec![symbol!("b")]),
+			vector![Element::List(vector![Element::List(vector![
+				Element::List(vector![symbol!("a")]),
+				Element::List(vector![symbol!("b")]),
 				symbol!("c"),
 				symbol!("d"),
 			])])]
@@ -1293,12 +1305,12 @@ root
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("root"),
-				Element::List(vec![
+				Element::List(vector![
 					symbol!("level1"),
 					symbol!("item1"),
-					Element::List(vec![symbol!("level2"), symbol!("item2"), symbol!("level3"),]),
+					Element::List(vector![symbol!("level2"), symbol!("item2"), symbol!("level3"),]),
 				]),
 				symbol!("back_to_level1"),
 			])]
@@ -1326,13 +1338,13 @@ back_to_level0
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![
-				Element::List(vec![
+			vector![
+				Element::List(vector![
 					symbol!("root"),
-					Element::List(vec![
+					Element::List(vector![
 						symbol!("level1"),
 						symbol!("item1"),
-						Element::List(vec![symbol!("level2"), symbol!("item2"), symbol!("level3"),]),
+						Element::List(vector![symbol!("level2"), symbol!("item2"), symbol!("level3"),]),
 					]),
 				]),
 				symbol!("back_to_level0"),
@@ -1373,13 +1385,13 @@ back_to_level0
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("function"),
-				Element::List(vec![symbol!("args"), Element::List(vec![symbol!("a"), symbol!("b"),]),]),
-				Element::List(vec![
+				Element::List(vector![symbol!("args"), Element::List(vector![symbol!("a"), symbol!("b"),]),]),
+				Element::List(vector![
 					symbol!("body"),
 					symbol!("statement1"),
-					Element::List(vec![symbol!("statement2"), Element::List(vec![symbol!("nested"),]),]),
+					Element::List(vector![symbol!("statement2"), Element::List(vector![symbol!("nested"),]),]),
 				]),
 			])]
 		)
@@ -1392,7 +1404,7 @@ back_to_level0
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![Element::List(vec![symbol!("-[_]->"), symbol!("expr"),])])]
+			vector![Element::List(vector![Element::List(vector![symbol!("-[_]->"), symbol!("expr"),])])]
 		)
 	}
 
@@ -1418,12 +1430,12 @@ back_to_level0
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("a"),
-				Element::List(vec![
+				Element::List(vector![
 					symbol!("-[_]/[_]->"),
-					Element::List(vec![symbol!("b")]),
-					Element::List(vec![symbol!("c")]),
+					Element::List(vector![symbol!("b")]),
+					Element::List(vector![symbol!("c")]),
 				]),
 				symbol!("d"),
 			])]
@@ -1496,7 +1508,7 @@ a \
 		let result = listify(lexed).unwrap();
 		assert_eq!(
 			result,
-			vec![symbol!("a"), Element::List(vec![symbol!("b"), symbol!("c"),]), symbol!("d"),]
+			vector![symbol!("a"), Element::List(vector![symbol!("b"), symbol!("c"),]), symbol!("d"),]
 		);
 	}
 
@@ -1522,10 +1534,10 @@ a \
 		let result = listify(lexed).unwrap();
 		assert_eq!(
 			result,
-			vec![
+			vector![
 				symbol!("a"),
-				Element::List(vec![symbol!("b"), symbol!("c"),]),
-				Element::List(vec![symbol!("d"),]),
+				Element::List(vector![symbol!("b"), symbol!("c"),]),
+				Element::List(vector![symbol!("d"),]),
 			]
 		);
 	}
@@ -1639,14 +1651,14 @@ a \
 		let listified = listify(lexed).unwrap();
 		assert_eq!(
 			listified,
-			vec![Element::List(vec![
+			vector![Element::List(vector![
 				symbol!("def"),
 				symbol!("f"),
-				Element::List(vec![
-					Element::List(vec![symbol!("a"), symbol!(":"), symbol!("int"),]),
-					Element::List(vec![symbol!("b"), symbol!(":"), symbol!("int"),]),
+				Element::List(vector![
+					Element::List(vector![symbol!("a"), symbol!(":"), symbol!("int"),]),
+					Element::List(vector![symbol!("b"), symbol!(":"), symbol!("int"),]),
 				]),
-				Element::List(vec![symbol!("a"), symbol!("+"), symbol!("b"),]),
+				Element::List(vector![symbol!("a"), symbol!("+"), symbol!("b"),]),
 			])]
 		)
 	}
