@@ -1,0 +1,11 @@
+[package]
+name = "format-macro-test"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+format-macro = { path = "../format-macro" }
+alicorn-format = { path = "../format" }
+imbl = "3.0"
+ustr = "1.1.0"

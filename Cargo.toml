@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "format",
+    "format", "format-macro", "format-macro-test",
 ]
 #default-members = [
 #    "format"

@@ -3,7 +3,7 @@ use crate::{
 	Indent,
 	lexer::{self, Item},
 };
-use imbl::{Vector, vector};
+use imbl::Vector;
 use std::sync::LazyLock;
 use ustr::Ustr;
 
@@ -499,6 +499,7 @@ impl std::fmt::Display for ListifyError {
 mod test {
 	use super::*;
 	use crate::lexer::{Item, lex};
+	use imbl::vector;
 	use pretty_assertions::assert_eq;
 
 	// test cases for listification stage of format
