@@ -296,45 +296,22 @@ pub fn format_matcher_impl(input: proc_macro2::TokenStream) -> proc_macro2::Toke
 				// We can't use syn here because the pattern contains non-Rust syntax (~x~)
 				let mut pattern_tokens = Vec::new();
 
-				// Manually collect tokens until =>
-				let fork = input.fork();
-				let remaining: proc_macro2::TokenStream = fork.parse()?;
-				let mut iter = remaining.into_iter().peekable();
-
-				while let Some(tok) = iter.peek() {
-					// Check for =>
-					if let proc_macro2::TokenTree::Punct(p) = tok {
-						if p.as_char() == '=' {
-							let saved = iter.clone();
-							iter.next();
-							if let Some(proc_macro2::TokenTree::Punct(p2)) = iter.peek() {
-								if p2.as_char() == '>' {
-									// Found =>, stop collecting pattern
-									// Advance input past what we collected
-									for _ in &pattern_tokens {
-										let _: proc_macro2::TokenTree = input.parse()?;
-									}
-									break;
-								}
-							}
-							iter = saved;
-						}
+				// Manually consume tokens from input until =>
+				loop {
+					// Peek ahead for =>
+					if input.peek(syn::Token![=>]) {
+						break;
 					}
-					pattern_tokens.push(iter.next().unwrap());
+
+					// Not =>, consume this token as part of pattern
+					pattern_tokens.push(input.parse::<proc_macro2::TokenTree>()?);
 				}
 
 				// Consume =>
 				input.parse::<syn::Token![=>]>()?;
 
 				// Parse body as expression - syn knows when it ends!
-				let body: Expr = match input.parse() {
-					Ok(expr) => expr,
-					Err(e) => {
-						eprintln!("ERROR parsing body after pattern: {:?}", pattern_tokens);
-						eprintln!("Remaining input: {}", input);
-						return Err(e);
-					}
-				};
+				let body: Expr = input.parse()?;
 
 				// Optional trailing comma
 				if input.peek(syn::Token![,]) {
