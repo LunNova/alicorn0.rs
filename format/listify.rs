@@ -444,19 +444,10 @@ pub fn listify(lines: Vec<lexer::LexedLine>) -> Result<FormatList, ListifyError>
 		}
 
 		// Add any remaining temporary elements to the current list
+		// Elements are always appended flat - nesting is handled at line start
 		if !temp_elements.is_empty() {
-			if temp_elements.len() == 1 && requires_continuation {
-				// If we have a single element and continuation, don't wrap
-				current_list.push_back(temp_elements.pop_back().unwrap());
-			} else if !requires_continuation {
-				// If no continuation and multiple elements, add them all
-				let temp = std::mem::replace(&mut temp_elements, Vector::new());
-				current_list.append(temp);
-			} else {
-				// With continuation and multiple elements, add as a list
-				current_list.push_back(Element::List(temp_elements.clone()));
-				temp_elements.clear();
-			}
+			let temp = std::mem::replace(&mut temp_elements, Vector::new());
+			current_list.append(temp);
 		}
 	}
 
@@ -1178,7 +1169,6 @@ print("fmt", a + b)
 			),
 		];
 		let listified = listify(lexed).unwrap();
-		dbg!(&listified);
 		assert_eq!(
 			listified,
 			vector![
@@ -1187,11 +1177,12 @@ print("fmt", a + b)
 					Element::List(vector![symbol!("c"), symbol!("d"),]),
 					symbol!("e"),
 				]),
+				// Semicolons: segments wrapped, but tail unwrapped (same as parens)
 				Element::List(vector![
 					symbol!("square-list"),
 					Element::List(vector![symbol!("a"), symbol!("b"),]),
 					Element::List(vector![symbol!("c"), symbol!("d"),]),
-					Element::List(vector![symbol!("e")]),
+					symbol!("e"),
 				])
 			]
 		)
@@ -1274,14 +1265,15 @@ print("fmt", a + b)
 			],
 		)];
 		let listified = listify(lexed).unwrap();
+		// Same structure as comma_separated_parenlist - outer block contains the paren list
 		assert_eq!(
 			listified,
-			vector![Element::List(vector![Element::List(vector![
+			vector![Element::List(vector![
 				Element::List(vector![symbol!("a")]),
 				Element::List(vector![symbol!("b")]),
 				symbol!("c"),
 				symbol!("d"),
-			])])]
+			])]
 		)
 	}
 
