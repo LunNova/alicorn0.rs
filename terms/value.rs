@@ -25,6 +25,8 @@ pub enum NativeOperative {
 	Arrow,
 	/// type annotation: expr : type
 	Annotate,
+	/// type_(level, depth) - universe constructor (literal args only, Lua bootstrap jank)
+	Type_,
 	// TODO: More operatives as needed
 	// Mk, Switch, Enum, Intrinsic, etc.
 }

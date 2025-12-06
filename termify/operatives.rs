@@ -11,7 +11,7 @@
 //! And returns an Inferrable term.
 
 use alicorn_format::{Element, FormatList};
-use alicorn_terms::Inferrable;
+use alicorn_terms::{Elaborated, FlexValue, Inferrable};
 use format_macro::format_matcher;
 
 use crate::{Env, ExprError, Goal, Result, expression};
@@ -21,6 +21,14 @@ fn expect_symbol(elem: &Element) -> Result<&str> {
 	match elem {
 		Element::Symbol(s) => Ok(s.as_str()),
 		_ => Err(ExprError::InvalidSyntax(format!("Expected symbol, got {:?}", elem))),
+	}
+}
+
+/// Helper to extract a number literal from an Element
+fn expect_number(elem: &Element) -> Result<f64> {
+	match elem {
+		Element::Number(n) => Ok(*n),
+		_ => Err(ExprError::InvalidSyntax(format!("Expected number literal, got {:?}", elem))),
 	}
 }
 
@@ -244,6 +252,59 @@ pub fn annotate_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Re
 			_ => {
 				return Err(ExprError::InvalidSyntax(
 					format!("annotation expects: expr type")
+				));
+			}
+		}
+	}
+}
+
+/// type_ operative: `type_(level, depth)` - universe constructor
+///
+/// Constructs a universe type `star(level, depth)`.
+/// The type of `type_(L, D)` is `star(L+1, D+1)`.
+///
+/// NOTE: This is Lua bootstrap jank - only accepts literal number arguments.
+/// A proper implementation would be a function that accepts any expression
+/// evaluating to a number. But this sidesteps needing full expression evaluation
+/// and type checking to work first.
+#[allow(non_snake_case)]
+pub fn type__operative(syntax: &FormatList, _env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	format_matcher! {
+		match syntax {
+			(~level_elem~, ~depth_elem~) => {
+				let level_f64 = expect_number(level_elem)?;
+				let depth_f64 = expect_number(depth_elem)?;
+
+				// Validate they're non-negative integers
+				if level_f64 < 0.0 || level_f64.fract() != 0.0 {
+					return Err(ExprError::InvalidSyntax(
+						format!("type_ level must be a non-negative integer, got {}", level_f64)
+					));
+				}
+				if depth_f64 < 0.0 || depth_f64.fract() != 0.0 {
+					return Err(ExprError::InvalidSyntax(
+						format!("type_ depth must be a non-negative integer, got {}", depth_f64)
+					));
+				}
+
+				let level = level_f64 as u8;
+				let depth = depth_f64 as u8;
+
+				// The VALUE is star(level, depth)
+				let star_value = Elaborated::Literal(FlexValue::Star { level, depth });
+
+				// The TYPE is star(level+1, depth+1)
+				let star_type = Elaborated::Literal(FlexValue::Star {
+					level: level + 1,
+					depth: depth + 1,
+				});
+
+				return Ok(Inferrable::typed(star_type, star_value));
+			},
+
+			_ => {
+				return Err(ExprError::InvalidSyntax(
+					format!("type_ expects: level depth (two number literals), got {} elements", syntax.len())
 				));
 			}
 		}

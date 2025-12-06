@@ -58,6 +58,8 @@ impl Env {
 
 	/// Create environment with base operatives
 	pub fn with_base_operatives() -> Self {
+		use alicorn_terms::Elaborated;
+
 		let mut env = Self::new();
 
 		// Register core operatives
@@ -67,6 +69,16 @@ impl Env {
 		env.bind("fn", Inferrable::native_operative(NativeOperative::AnnotatedLambda));
 		env.bind("forall", Inferrable::native_operative(NativeOperative::Forall));
 		env.bind(":", Inferrable::native_operative(NativeOperative::Annotate));
+		env.bind("type_", Inferrable::native_operative(NativeOperative::Type_));
+
+		// `type` is a literal: star(0, 0) with type star(1, 1)
+		env.bind(
+			"type",
+			Inferrable::typed(
+				Elaborated::Literal(FlexValue::Star { level: 1, depth: 1 }),
+				Elaborated::Literal(FlexValue::Star { level: 0, depth: 0 }),
+			),
+		);
 
 		// Register primitive types for annotations
 		env.bind("Number", Inferrable::literal(FlexValue::HostNumberType));
@@ -245,6 +257,7 @@ fn call_operative(op: NativeOperative, syntax: FormatList, env: &mut Env, goal: 
 		NativeOperative::Forall => forall_operative(&syntax, env, goal),
 		NativeOperative::AnnotatedLambda => annotated_lambda_operative(&syntax, env, goal),
 		NativeOperative::Annotate => annotate_operative(&syntax, env, goal),
+		NativeOperative::Type_ => type__operative(&syntax, env, goal),
 	}
 }
 
@@ -457,6 +470,39 @@ mod tests {
 		assert!(
 			matches!(result, FlexValue::HostNumber { value } if value == 1.0),
 			"Expected 1.0, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_type_literal() {
+		// `type` is star(0, 0)
+		let result = run_file("type").unwrap();
+		assert!(
+			matches!(result, FlexValue::Star { level: 0, depth: 0 }),
+			"Expected Star {{ level: 0, depth: 0 }}, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_type_underscore() {
+		// type_(9, 1) → star(9, 1)
+		let result = run_file("type_(9, 1)").unwrap();
+		assert!(
+			matches!(result, FlexValue::Star { level: 9, depth: 1 }),
+			"Expected Star {{ level: 9, depth: 1 }}, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_type_underscore_omega() {
+		// type_(9, 0) is type-omega from prelude
+		let result = run_file("type_(9, 0)").unwrap();
+		assert!(
+			matches!(result, FlexValue::Star { level: 9, depth: 0 }),
+			"Expected Star {{ level: 9, depth: 0 }}, got {:?}",
 			result
 		);
 	}
