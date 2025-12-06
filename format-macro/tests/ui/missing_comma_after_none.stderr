@@ -1,0 +1,5 @@
+error: Missing comma after match arm body. Each match arm must end with a comma (,)
+  --> tests/ui/missing_comma_after_none.rs:12:27
+   |
+12 |             (foo, ~x~) => None
+   |                           ^^^^

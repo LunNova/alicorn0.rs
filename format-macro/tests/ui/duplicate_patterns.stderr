@@ -1,0 +1,11 @@
+error: unreachable pattern
+  --> tests/ui/duplicate_patterns.rs:10:13
+   |
+10 |             (~y~) => Some(y),
+   |             ^^^^^
+
+error: note: earlier pattern here
+ --> tests/ui/duplicate_patterns.rs:9:13
+  |
+9 |             (~x~) => None,
+  |             ^^^^^

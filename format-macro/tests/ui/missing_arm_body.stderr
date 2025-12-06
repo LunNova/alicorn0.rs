@@ -1,0 +1,11 @@
+error: Expected expression in match arm body
+  --> tests/ui/missing_arm_body.rs:7:5
+   |
+ 7 | /     format_matcher! {
+ 8 | |         match list {
+ 9 | |             (~x~) =>
+10 | |         }
+11 | |     }
+   | |_____^
+   |
+   = note: this error originates in the macro `format_matcher` (in Nightly builds, run with -Z macro-backtrace for more info)
