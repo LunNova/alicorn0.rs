@@ -77,6 +77,7 @@
             pkgs.inferno
             pkgs.lua-language-server
             pkgs.cargo-modules
+            pkgs.cargo-machete
             pkgs.cargo-nextest
             pkgs.cargo-expand
             (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
