@@ -66,7 +66,7 @@ impl Env {
 		env.bind("let", Inferrable::native_operative(NativeOperative::Let));
 		env.bind("->", Inferrable::native_operative(NativeOperative::Arrow));
 		env.bind("lambda", Inferrable::native_operative(NativeOperative::Lambda));
-		env.bind("fn", Inferrable::native_operative(NativeOperative::AnnotatedLambda));
+		env.bind("lambda_single", Inferrable::native_operative(NativeOperative::LambdaSingle));
 		env.bind("forall", Inferrable::native_operative(NativeOperative::Forall));
 		env.bind(":", Inferrable::native_operative(NativeOperative::Annotate));
 		env.bind("type_", Inferrable::native_operative(NativeOperative::Type_));
@@ -261,7 +261,7 @@ fn call_operative(op: NativeOperative, syntax: FormatList, env: &mut Env, goal: 
 		NativeOperative::Arrow => arrow_operative(&syntax, env, goal),
 		NativeOperative::Lambda => lambda_operative(&syntax, env, goal),
 		NativeOperative::Forall => forall_operative(&syntax, env, goal),
-		NativeOperative::AnnotatedLambda => annotated_lambda_operative(&syntax, env, goal),
+		NativeOperative::LambdaSingle => lambda_single_operative(&syntax, env, goal),
 		NativeOperative::Annotate => annotate_operative(&syntax, env, goal),
 		NativeOperative::Type_ => type__operative(&syntax, env, goal),
 		NativeOperative::LambdaCurry => lambda_curry_operative(&syntax, env, goal),
@@ -443,8 +443,8 @@ mod tests {
 
 	#[test]
 	fn run_identity_lambda() {
-		// (fn (x : Number) x) 42 → 42
-		let result = run_file("(fn (x : Number) x) 42").unwrap();
+		// (lambda_single (x : Number) x) 42 → 42
+		let result = run_file("(lambda_single (x : Number) x) 42").unwrap();
 		assert!(
 			matches!(result, FlexValue::HostNumber { value } if value == 42.0),
 			"Expected 42.0, got {:?}",
@@ -476,8 +476,8 @@ mod tests {
 
 	#[test]
 	fn run_k_combinator() {
-		// ((fn (x : Number) (fn (y : Number) x)) 1) 2 → 1
-		let result = run_file("((fn (x : Number) (fn (y : Number) x)) 1) 2").unwrap();
+		// ((lambda_single (x : Number) (lambda_single (y : Number) x)) 1) 2 → 1
+		let result = run_file("((lambda_single (x : Number) (lambda_single (y : Number) x)) 1) 2").unwrap();
 		assert!(
 			matches!(result, FlexValue::HostNumber { value } if value == 1.0),
 			"Expected 1.0, got {:?}",
@@ -527,10 +527,10 @@ mod tests {
 	}
 
 	#[test]
-	fn run_lambda_curry_with_inner_fn() {
+	fn run_lambda_curry_with_inner_lambda_single() {
 		// More realistic: lambda_curry with an inner explicit lambda
-		// lambda_curry ((T : type_(9, 1))) (fn (x : Number) x)
-		let result = run_file("lambda_curry ((T : type_(9, 1))) (fn (x : Number) x)").unwrap();
+		// lambda_curry ((T : type_(9, 1))) (lambda_single (x : Number) x)
+		let result = run_file("lambda_curry ((T : type_(9, 1))) (lambda_single (x : Number) x)").unwrap();
 		assert!(matches!(result, FlexValue::Closure { .. }), "Expected Closure, got {:?}", result);
 	}
 }

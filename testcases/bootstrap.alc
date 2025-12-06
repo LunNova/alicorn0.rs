@@ -10,12 +10,12 @@ let x = 5 in x
 let a = 1 in (let b = 2 in a)
 
 # Identity function (indentation continues expression after =)
-let id = fn (n : Number)
+let id = lambda_single (n : Number)
 	n
 id 99
 
 # K combinator - returns first arg, ignores second
-let k = fn (x : Number)
-	fn (y : Number)
+let k = lambda_single (x : Number)
+	lambda_single (y : Number)
 		x
 (k 1) 2

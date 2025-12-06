@@ -3,7 +3,7 @@
 # lambda_implicit creates a lambda with implicit type parameter
 # Usage: lambda_implicit (T : Type) body
 let identity = lambda_implicit (T : type)
-	fn (x : T)
+	lambda_single (x : T)
 		x
 
 # Apply it to a number

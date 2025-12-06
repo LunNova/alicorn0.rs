@@ -17,8 +17,8 @@ pub enum NativeOperative {
 	Let,
 	/// param -> body (lambda with inferred param type)
 	Lambda,
-	/// (param : type) -> body (lambda with explicit param type)
-	AnnotatedLambda,
+	/// lambda_single (param : type) body - single-param lambda with explicit type
+	LambdaSingle,
 	/// forall (param : type) -> result_type (pi type)
 	Forall,
 	/// The arrow operator for lambda/pi sugar

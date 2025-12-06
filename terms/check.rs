@@ -133,7 +133,7 @@ pub fn elaborate(term: &Inferrable, ctx: &TypingContext) -> CheckResult<(Elabora
 
 		// Lambda without annotation - requires type inference with metavariables
 		InferrableKind::Lambda { param_type: None, .. } => Err(CheckError::NotImplemented(
-			"Lambda without type annotation - use `fn (x : Type) body` syntax".to_string(),
+			"Lambda without type annotation - use `lambda_single (x : Type) body` syntax".to_string(),
 		)),
 
 		// Application

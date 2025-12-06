@@ -197,13 +197,13 @@ pub fn forall_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Resu
 	Ok(Inferrable::pi(param_name, param_type_term, result_term))
 }
 
-/// Annotated lambda operative: `(param : type) -> body`
-pub fn annotated_lambda_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+/// lambda_single operative: `lambda_single (param : type) body`
+///
+/// Single-param lambda with explicit type annotation and explicit visibility.
+pub fn lambda_single_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
 	// Expect: (param : type) body...
 	if syntax.is_empty() {
-		return Err(ExprError::InvalidSyntax(
-			"annotated lambda expects: (param : type) body".to_string(),
-		));
+		return Err(ExprError::InvalidSyntax("lambda_single expects: (param : type) body".to_string()));
 	}
 
 	let first = &syntax[0];
@@ -220,7 +220,7 @@ pub fn annotated_lambda_operative(syntax: &FormatList, env: &mut Env, _goal: Goa
 			let type_term = expression(&type_syntax, env, Goal::Infer)?;
 			(param, type_term)
 		}
-		_ => return Err(ExprError::InvalidSyntax("annotated lambda expects (param : type)".to_string())),
+		_ => return Err(ExprError::InvalidSyntax("lambda_single expects (param : type)".to_string())),
 	};
 
 	// Extend env for body
