@@ -46,10 +46,14 @@ fn apply_closure(closure: &Vector<Element>, arg: &Element) -> Option<Element> {
 				if let Element::Symbol(p) = param {
 					let mut new_env = element_to_env(env);
 					new_env.insert(p.to_string(), arg.clone());
-					eprintln!("Applying closure with env: {:?}", new_env);
 					if let Element::List(body_list) = body {
-						let result = eval(&Element::List(body_list.clone()), &new_env);
-						eprintln!("Body eval result: {:?}", result);
+						// If the body is a single expression, evaluate it directly
+						// Otherwise evaluate as a sequence
+						let result = if body_list.len() == 1 {
+							eval(&body_list[0], &new_env)
+						} else {
+							eval(&Element::List(body_list.clone()), &new_env)
+						};
 						Some(result)
 					} else {
 						None
@@ -57,7 +61,7 @@ fn apply_closure(closure: &Vector<Element>, arg: &Element) -> Option<Element> {
 				} else {
 					None
 				}
-			}
+			},
 			_ => None
 		}
 	}
@@ -85,53 +89,47 @@ fn eval(expr: &Element, env: &Env) -> Element {
 					},
 					// Lambda: x -> body (create closure)
 					(~param~, ->, ~body...~) => {
-						eprintln!("MATCHED LAMBDA PATTERN!");
 						if let Element::Symbol(p) = param {
-							let closure = make_closure(p.as_str(), body.clone(), env);
-							eprintln!("Created closure: {:?}", closure);
-							closure
+							make_closure(p.as_str(), body.clone(), env)
 						} else {
 							Element::List(list.clone())
 						}
 					},
-					// Function application or operators
-					(~op~, ~left~, ~right~) => {
-						if let Element::Symbol(s) = op {
+					// Varargs function application: (func args...)
+					(~func~, ~args...~) => {
+						let f = eval(func, env);
+
+						// Evaluate all args
+						let evaluated_args: Vector<Element> = args.iter()
+							.map(|a| eval(a, env))
+							.collect();
+
+						// Check for builtin operators
+						if let Element::Symbol(s) = &f {
 							match s.as_str() {
 								"+" => {
-									let l = eval(left, env);
-									let r = eval(right, env);
-									if let (Element::Number(ln), Element::Number(rn)) = (l, r) {
-										Element::Number(ln + rn)
-									} else {
-										Element::List(list.clone())
+									if evaluated_args.len() == 2 {
+										if let (Element::Number(l), Element::Number(r)) = (&evaluated_args[0], &evaluated_args[1]) {
+											return Element::Number(l + r);
+										}
 									}
+									return Element::List(list.clone());
 								}
-								_ => Element::List(list.clone())
+								_ => {}
 							}
-						} else {
-							Element::List(list.clone())
 						}
-					},
-					// Two-element function application: (func arg)
-					(~func~, ~arg~) => {
-						eprintln!("MATCHED 2-ELEMENT APPLICATION!");
-						let f = eval(func, env);
-						eprintln!("Evaluated func to: {:?}", f);
-						let a = eval(arg, env);
-						eprintln!("Evaluated arg to: {:?}", a);
+
+						// Try applying as closure (use first arg)
 						if let Element::List(closure_list) = &f {
-							eprintln!("It's a list, trying to apply as closure");
-							if let Some(result) = apply_closure(closure_list, &a) {
-								eprintln!("Application succeeded! Result: {:?}", result);
-								return result;
-							} else {
-								eprintln!("apply_closure returned None");
+							if !evaluated_args.is_empty() {
+								if let Some(result) = apply_closure(closure_list, &evaluated_args[0]) {
+									return result;
+								}
 							}
 						}
 						Element::List(list.clone())
 					},
-					_ => { Element::List(list.clone()) }
+					_ => Element::List(list.clone())
 				}
 			}
 		}
@@ -141,32 +139,22 @@ fn eval(expr: &Element, env: &Env) -> Element {
 
 #[test]
 fn test_listify_arrow() {
-	// First, let's see what listify! actually produces for ->
 	let lam = listify!(x -> + x 1);
+	println!("{lam:#?}");
 
-	// Check the structure
-	assert_eq!(lam.len(), 1, "Should have one top-level element");
+	let expected = vector![Element::List(vector![
+		Element::Symbol("x".into()),
+		Element::Symbol("->".into()),
+		Element::Symbol("+".into()),
+		Element::Symbol("x".into()),
+		Element::Number(1.0),
+	])];
 
-	let list = if let Some(Element::List(list)) = lam.get(0) {
-		list
-	} else {
-		panic!("Expected a list");
-	};
-
-	// Print what we got
-	println!("Lambda structure:");
-	for (i, elem) in list.iter().enumerate() {
-		println!("  [{}]: {:?}", i, elem);
-	}
-
-	// Assert on the actual structure
-	assert_eq!(list.len(), 5, "Should have 5 elements: x, ->, +, x, 1");
-	assert!(matches!(list[0], Element::Symbol(_)), "First should be symbol 'x'");
-	assert!(matches!(list[1], Element::Symbol(_)), "Second should be symbol '->'");
+	assert_eq!(lam, expected);
 }
 
 #[test]
-fn test_combined_evaluator() {
+fn test_lambda_application() {
 	// Test: make a lambda x -> (+ x 1) and apply it to 4
 	let lam = listify!(x -> + x 1);
 	let lam_elem = lam.get(0).unwrap();
@@ -178,10 +166,16 @@ fn test_combined_evaluator() {
 	let result = eval(&app, &env);
 
 	assert_eq!(result, Element::Number(5.0), "Lambda application should compute (+ 4 1) = 5");
+}
 
+#[test]
+fn test_let_binding() {
 	// Test: let x = 4 in (+ x 1)
 	let let_expr = listify!(x = 4 in + x 1);
 	let let_elem = let_expr.get(0).unwrap();
+
+	let env = HashMap::new();
 	let result = eval(let_elem, &env);
+
 	assert_eq!(result, Element::Number(5.0), "Let binding should compute (+ 4 1) = 5");
 }

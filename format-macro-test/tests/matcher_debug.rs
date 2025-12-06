@@ -18,9 +18,8 @@ fn try_apply_lambda(lam_list: &imbl::Vector<Element>, arg: &Element, env: &Env) 
 					new_env.insert(p.as_str().to_string(), arg.clone());
 				}
 				Some(eval(body, &new_env))
-			}
-			// FIXME: we have to brace this due to format_matcher! limitations
-			_ => { None }
+			},
+			_ => None
 		}
 	}
 }

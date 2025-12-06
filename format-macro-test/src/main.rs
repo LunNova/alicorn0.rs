@@ -37,7 +37,7 @@ fn main() {
 				println!("args: {:?}", args);
 				println!("body: {:?}", body);
 				true
-			}
+			},
 			_ => {
 				println!("No match");
 				false
@@ -63,8 +63,8 @@ fn test_let_pattern() {
 				assert!(matches!(name, alicorn_format::Element::Symbol(_)));
 				assert!(matches!(expr, alicorn_format::Element::Number(42.0)));
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match let pattern");
@@ -79,19 +79,14 @@ fn test_lambda_simple() {
 		panic!("Expected a list");
 	};
 
-	println!("Lambda simple structure:");
-	for (i, elem) in lam_list.iter().enumerate() {
-		println!("  [{}]: {:?}", i, elem);
-	}
-
 	let matched = format_matcher! {
 		match lam_list {
 			(~name~, ->, ~body...~) => {
 				assert!(matches!(name, alicorn_format::Element::Symbol(_)));
 				println!("Body: {:?}", body);
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match simple lambda");
@@ -112,8 +107,8 @@ fn test_lambda_typed() {
 				assert!(matches!(name, alicorn_format::Element::Symbol(_)));
 				assert!(matches!(annotation, alicorn_format::Element::Symbol(_)));
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match typed lambda");
@@ -135,8 +130,8 @@ fn test_lambda_bounded() {
 				assert!(matches!(bound, alicorn_format::Element::Symbol(_)));
 				assert!(matches!(annotation, alicorn_format::Element::Symbol(_)));
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match bounded typed lambda");
@@ -158,8 +153,8 @@ fn test_forall_simple() {
 				assert!(matches!(annotation, alicorn_format::Element::Symbol(_)));
 				assert!(matches!(result, alicorn_format::Element::Symbol(_)));
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match forall pattern");
@@ -182,8 +177,8 @@ fn test_forall_bounded() {
 				assert!(matches!(annotation, alicorn_format::Element::Symbol(_)));
 				assert!(matches!(result, alicorn_format::Element::Symbol(_)));
 				true
-			}
-			_ => { false }
+			},
+			_ => false
 		}
 	};
 	assert!(matched, "Should match bounded forall pattern");
