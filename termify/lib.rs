@@ -70,6 +70,7 @@ impl Env {
 		env.bind("forall", Inferrable::native_operative(NativeOperative::Forall));
 		env.bind(":", Inferrable::native_operative(NativeOperative::Annotate));
 		env.bind("type_", Inferrable::native_operative(NativeOperative::Type_));
+		env.bind("lambda_curry", Inferrable::native_operative(NativeOperative::LambdaCurry));
 
 		// `type` is a literal: star(0, 0) with type star(1, 1)
 		env.bind(
@@ -258,6 +259,7 @@ fn call_operative(op: NativeOperative, syntax: FormatList, env: &mut Env, goal: 
 		NativeOperative::AnnotatedLambda => annotated_lambda_operative(&syntax, env, goal),
 		NativeOperative::Annotate => annotate_operative(&syntax, env, goal),
 		NativeOperative::Type_ => type__operative(&syntax, env, goal),
+		NativeOperative::LambdaCurry => lambda_curry_operative(&syntax, env, goal),
 	}
 }
 
@@ -505,5 +507,21 @@ mod tests {
 			"Expected Star {{ level: 9, depth: 0 }}, got {:?}",
 			result
 		);
+	}
+
+	#[test]
+	fn run_lambda_curry_identity() {
+		// lambda_curry ((T : type_(9, 1))) T → implicit lambda that returns its type param
+		let result = run_file("lambda_curry ((T : type_(9, 1))) T").unwrap();
+		// Should be a closure
+		assert!(matches!(result, FlexValue::Closure { .. }), "Expected Closure, got {:?}", result);
+	}
+
+	#[test]
+	fn run_lambda_curry_with_inner_fn() {
+		// More realistic: lambda_curry with an inner explicit lambda
+		// lambda_curry ((T : type_(9, 1))) (fn (x : Number) x)
+		let result = run_file("lambda_curry ((T : type_(9, 1))) (fn (x : Number) x)").unwrap();
+		assert!(matches!(result, FlexValue::Closure { .. }), "Expected Closure, got {:?}", result);
 	}
 }

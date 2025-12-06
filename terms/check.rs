@@ -102,9 +102,11 @@ pub fn elaborate(term: &Inferrable, ctx: &TypingContext) -> CheckResult<(Elabora
 		}
 
 		// Lambda with type annotation
+		// TODO: Use visibility for implicit arg handling when constraint solver is done
 		InferrableKind::Lambda {
 			param_name,
 			param_type: Some(param_type_inferrable),
+			visibility: _,
 			body,
 		} => {
 			// Elaborate the parameter type

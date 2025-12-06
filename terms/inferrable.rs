@@ -9,6 +9,17 @@
 
 use crate::value::{FlexValue, NativeOperative, SpannedName};
 
+/// Parameter visibility for lambdas and pi types.
+///
+/// - `Explicit`: Must be passed at call site (normal function args)
+/// - `Implicit`: Can be inferred from context (type parameters in lambda_curry)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Visibility {
+	#[default]
+	Explicit,
+	Implicit,
+}
+
 /// Source span for error messages
 #[derive(Debug, Clone, Default)]
 pub struct Span {
@@ -76,9 +87,23 @@ impl Inferrable {
 	}
 
 	pub fn lambda(param_name: impl Into<String>, param_type: Option<Box<Inferrable>>, body: Inferrable) -> Self {
+		Self::lambda_with_visibility(param_name, param_type, Visibility::Explicit, body)
+	}
+
+	pub fn lambda_implicit(param_name: impl Into<String>, param_type: Option<Box<Inferrable>>, body: Inferrable) -> Self {
+		Self::lambda_with_visibility(param_name, param_type, Visibility::Implicit, body)
+	}
+
+	pub fn lambda_with_visibility(
+		param_name: impl Into<String>,
+		param_type: Option<Box<Inferrable>>,
+		visibility: Visibility,
+		body: Inferrable,
+	) -> Self {
 		Self::with_dummy_span(InferrableKind::Lambda {
 			param_name: param_name.into(),
 			param_type,
+			visibility,
 			body: Box::new(body),
 		})
 	}
@@ -167,9 +192,11 @@ pub enum InferrableKind {
 
 	/// Lambda abstraction
 	/// param_type is optional - if None, will be inferred (creates metavar)
+	/// visibility controls whether param must be passed explicitly at call site
 	Lambda {
 		param_name: String,
 		param_type: Option<Box<Inferrable>>,
+		visibility: Visibility,
 		body: Box<Inferrable>,
 	},
 

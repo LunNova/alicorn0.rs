@@ -24,5 +24,5 @@ pub use check::{CheckError, elaborate};
 pub use elaborated::Elaborated;
 pub use eval::{Env, evaluate};
 pub use infer::{InferError, TypingContext, as_operative_type, infer, is_pi_type, type_of_value};
-pub use inferrable::{Inferrable, InferrableKind, Span};
+pub use inferrable::{Inferrable, InferrableKind, Span, Visibility};
 pub use value::{FlexValue, NativeOperative, SpannedName, StrictValue, StuckValue};

@@ -11,7 +11,7 @@
 //! And returns an Inferrable term.
 
 use alicorn_format::{Element, FormatList};
-use alicorn_terms::{Elaborated, FlexValue, Inferrable};
+use alicorn_terms::{Elaborated, FlexValue, Inferrable, Visibility};
 use format_macro::format_matcher;
 
 use crate::{Env, ExprError, Goal, Result, expression};
@@ -309,6 +309,78 @@ pub fn type__operative(syntax: &FormatList, _env: &mut Env, _goal: Goal) -> Resu
 			}
 		}
 	}
+}
+
+/// lambda_curry operative: `lambda_curry ((param : type)) body`
+///
+/// Creates a lambda with an implicit type parameter. The double parens indicate
+/// an explicit type parameter that can be inferred at call sites.
+///
+/// Syntax: `lambda_curry ((T : Type)) body`
+/// - First element is `((T : Type))` - a list containing a list with param binding
+/// - Rest is the body expression
+///
+/// The resulting lambda has Visibility::Implicit, meaning the type argument
+/// can be inferred rather than explicitly passed.
+pub fn lambda_curry_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	// Expect: ((param : type)) body...
+	if syntax.is_empty() {
+		return Err(ExprError::InvalidSyntax("lambda_curry expects: ((param : type)) body".to_string()));
+	}
+
+	let first = &syntax[0];
+	let rest = syntax.clone().slice(1..);
+
+	// Parse ((param : type)) - outer list containing inner list with binding
+	let (param_name, param_type_term) = match first {
+		Element::List(outer) => {
+			// outer should contain a single list element: (param : type)
+			if outer.len() != 1 {
+				return Err(ExprError::InvalidSyntax(format!(
+					"lambda_curry expects ((param : type)), got {} elements in outer parens",
+					outer.len()
+				)));
+			}
+			match &outer[0] {
+				Element::List(inner) => {
+					// inner is [param, :, type...]
+					if inner.len() < 3 {
+						return Err(ExprError::InvalidSyntax(
+							"lambda_curry param binding should be ((param : type))".to_string(),
+						));
+					}
+					let param = expect_symbol(&inner[0])?;
+					// inner[1] should be ":"
+					let type_syntax = inner.clone().slice(2..);
+					let type_term = expression(&type_syntax, env, Goal::Infer)?;
+					(param, type_term)
+				}
+				_ => {
+					return Err(ExprError::InvalidSyntax("lambda_curry expects ((param : type))".to_string()));
+				}
+			}
+		}
+		_ => {
+			return Err(ExprError::InvalidSyntax(
+				"lambda_curry expects ((param : type)) as first argument".to_string(),
+			));
+		}
+	};
+
+	// Extend env for body with the implicit param bound
+	let mut body_env = env.clone();
+	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
+	body_env.depth += 1;
+
+	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
+
+	// Create lambda with IMPLICIT visibility
+	Ok(Inferrable::lambda_with_visibility(
+		param_name,
+		Some(Box::new(param_type_term)),
+		Visibility::Implicit,
+		body_term,
+	))
 }
 
 #[cfg(test)]

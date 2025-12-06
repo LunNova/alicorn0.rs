@@ -128,9 +128,11 @@ pub fn infer(term: &Inferrable, ctx: &TypingContext) -> InferResult<FlexValue> {
 		)),
 
 		// Lambda with annotation: infer param type, extend context, infer body
+		// TODO: Use visibility for implicit arg handling when constraint solver is done
 		InferrableKind::Lambda {
 			param_name,
 			param_type: Some(param_ty),
+			visibility: _,
 			body,
 		} => {
 			let param_type_val = infer(param_ty, ctx)?;
