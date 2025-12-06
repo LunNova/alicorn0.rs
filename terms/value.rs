@@ -29,6 +29,14 @@ pub enum NativeOperative {
 	Type_,
 	/// lambda_curry ((param : type)) body - lambda with implicit type parameter
 	LambdaCurry,
+	/// lambda_implicit (param : type) body - lambda with implicit param (single parens)
+	LambdaImplicit,
+	/// wrap T x - wrap a value of type T
+	Wrap,
+	/// unwrap T x - unwrap a wrapped value
+	Unwrap,
+	/// wrapped(T) - the type of wrapped values of type T
+	Wrapped,
 	// TODO: More operatives as needed
 	// Mk, Switch, Enum, Intrinsic, etc.
 }
@@ -96,6 +104,10 @@ pattern_wishcast! {
 		HostNumberType,
 		HostStringType,
 		HostBoolType,
+		HostTypeType,
+
+		HostWrappedType { type_val: Box<Self> },
+		HostWrappedValue { type_val: Box<Self>, content: Box<Self> },
 
 		OperativeType {
 			handler: NativeOperative,
@@ -119,6 +131,9 @@ pattern_wishcast! {
 		HostNumberType |
 		HostStringType |
 		HostBoolType |
+		HostTypeType |
+		HostWrappedType { .. } |
+		HostWrappedValue { .. } |
 		OperativeType { .. } |
 		OperativeCons { .. };
 

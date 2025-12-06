@@ -71,6 +71,10 @@ impl Env {
 		env.bind(":", Inferrable::native_operative(NativeOperative::Annotate));
 		env.bind("type_", Inferrable::native_operative(NativeOperative::Type_));
 		env.bind("lambda_curry", Inferrable::native_operative(NativeOperative::LambdaCurry));
+		env.bind("lambda_implicit", Inferrable::native_operative(NativeOperative::LambdaImplicit));
+		env.bind("wrap", Inferrable::native_operative(NativeOperative::Wrap));
+		env.bind("unwrap", Inferrable::native_operative(NativeOperative::Unwrap));
+		env.bind("wrapped", Inferrable::native_operative(NativeOperative::Wrapped));
 
 		// `type` is a literal: star(0, 0) with type star(1, 1)
 		env.bind(
@@ -85,6 +89,7 @@ impl Env {
 		env.bind("Number", Inferrable::literal(FlexValue::HostNumberType));
 		env.bind("String", Inferrable::literal(FlexValue::HostStringType));
 		env.bind("Bool", Inferrable::literal(FlexValue::HostBoolType));
+		env.bind("host-type", Inferrable::literal(FlexValue::HostTypeType));
 
 		env
 	}
@@ -260,6 +265,10 @@ fn call_operative(op: NativeOperative, syntax: FormatList, env: &mut Env, goal: 
 		NativeOperative::Annotate => annotate_operative(&syntax, env, goal),
 		NativeOperative::Type_ => type__operative(&syntax, env, goal),
 		NativeOperative::LambdaCurry => lambda_curry_operative(&syntax, env, goal),
+		NativeOperative::LambdaImplicit => lambda_implicit_operative(&syntax, env, goal),
+		NativeOperative::Wrap => wrap_operative(&syntax, env, goal),
+		NativeOperative::Unwrap => unwrap_operative(&syntax, env, goal),
+		NativeOperative::Wrapped => wrapped_operative(&syntax, env, goal),
 	}
 }
 

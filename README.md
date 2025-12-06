@@ -22,8 +22,9 @@ Taking this opportunity to simplify some decisions. No metalanguage, less differ
 
 - [ ] **Operatives** - Syntax transformers
   - [x] `let`, `fn`, `forall`, `:`, `type`, `type_`, `lambda_curry`
-  - [ ] `lambda_implicit`, `lambda_single`, `lambda_annotated`
-  - [ ] `wrap`/`unwrap`/`wrapped` (host type wrapping)
+  - [x] `lambda_implicit`
+  - [x] `wrap`/`unwrap`/`wrapped` (host type wrapping)
+  - [ ] `lambda_single`, `lambda_annotated`
   - [ ] `intrinsic` (host escape hatch)
   - [ ] `mk`, `switch`, `enum` (data construction)
   - [ ] `record`, `record-of`

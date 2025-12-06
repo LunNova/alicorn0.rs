@@ -383,6 +383,160 @@ pub fn lambda_curry_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -
 	))
 }
 
+/// lambda_implicit operative: `lambda_implicit (param : type) body`
+///
+/// Creates a lambda with an implicit parameter. Unlike lambda_curry which uses
+/// double parens `((param : type))`, lambda_implicit uses single parens.
+///
+/// Syntax: `lambda_implicit (T : Type) body`
+/// - First element is `(T : Type)` - a list with param binding
+/// - Rest is the body expression
+///
+/// The resulting lambda has Visibility::Implicit, meaning the type argument
+/// can be inferred rather than explicitly passed.
+pub fn lambda_implicit_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	// Expect: (param : type) body...
+	if syntax.is_empty() {
+		return Err(ExprError::InvalidSyntax("lambda_implicit expects: (param : type) body".to_string()));
+	}
+
+	let first = &syntax[0];
+	let rest = syntax.clone().slice(1..);
+
+	// Parse (param : type) - single parens containing binding
+	let (param_name, param_type_term) = match first {
+		Element::List(inner) => {
+			// inner is [param, :, type...]
+			if inner.len() < 3 {
+				return Err(ExprError::InvalidSyntax(
+					"lambda_implicit param binding should be (param : type)".to_string(),
+				));
+			}
+			let param = expect_symbol(&inner[0])?;
+			// inner[1] should be ":"
+			let type_syntax = inner.clone().slice(2..);
+			let type_term = expression(&type_syntax, env, Goal::Infer)?;
+			(param, type_term)
+		}
+		_ => {
+			return Err(ExprError::InvalidSyntax(
+				"lambda_implicit expects (param : type) as first argument".to_string(),
+			));
+		}
+	};
+
+	// Extend env for body with the implicit param bound
+	let mut body_env = env.clone();
+	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
+	body_env.depth += 1;
+
+	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
+
+	// Create lambda with IMPLICIT visibility
+	Ok(Inferrable::lambda_with_visibility(
+		param_name,
+		Some(Box::new(param_type_term)),
+		Visibility::Implicit,
+		body_term,
+	))
+}
+
+/// wrap operative: `wrap T x`
+///
+/// Wraps a value x of type T, producing a value of type wrapped(T).
+/// This is used for the modal type system - creating phase-distinguished values.
+pub fn wrap_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	format_matcher! {
+		match syntax {
+			(~type_elem~, ~content_elem~) => {
+				let type_list = elem_to_list(type_elem);
+				let content_list = elem_to_list(content_elem);
+
+				let type_term = expression(&type_list, env, Goal::Infer)?;
+				let content_term = expression(&content_list, env, Goal::Infer)?;
+
+				return Ok(Inferrable::host_wrap(type_term, content_term));
+			},
+
+			// Also handle single argument case: wrap(T, x) as a list
+			(~args~) => {
+				let args_list = elem_to_list(args);
+				if args_list.len() >= 2 {
+					// Recursively call with the two args
+					return wrap_operative(&args_list, env, _goal);
+				}
+				return Err(ExprError::InvalidSyntax(
+					"wrap expects two arguments: type and value".to_string()
+				));
+			},
+
+			_ => {
+				return Err(ExprError::InvalidSyntax(
+					format!("wrap expects: T x, got {} elements", syntax.len())
+				));
+			}
+		}
+	}
+}
+
+/// unwrap operative: `unwrap T x`
+///
+/// Unwraps a value of type wrapped(T), producing a value of type T.
+pub fn unwrap_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	format_matcher! {
+		match syntax {
+			(~type_elem~, ~container_elem~) => {
+				let type_list = elem_to_list(type_elem);
+				let container_list = elem_to_list(container_elem);
+
+				let type_term = expression(&type_list, env, Goal::Infer)?;
+				let container_term = expression(&container_list, env, Goal::Infer)?;
+
+				return Ok(Inferrable::host_unwrap(type_term, container_term));
+			},
+
+			// Handle single argument case: unwrap(T, x) as a list
+			(~args~) => {
+				let args_list = elem_to_list(args);
+				if args_list.len() >= 2 {
+					return unwrap_operative(&args_list, env, _goal);
+				}
+				return Err(ExprError::InvalidSyntax(
+					"unwrap expects two arguments: type and wrapped value".to_string()
+				));
+			},
+
+			_ => {
+				return Err(ExprError::InvalidSyntax(
+					format!("unwrap expects: T x, got {} elements", syntax.len())
+				));
+			}
+		}
+	}
+}
+
+/// wrapped operative: `wrapped(T)` or `wrapped T`
+///
+/// Returns the type of wrapped values of type T.
+pub fn wrapped_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	format_matcher! {
+		match syntax {
+			(~type_elem~) => {
+				let type_list = elem_to_list(type_elem);
+				let type_term = expression(&type_list, env, Goal::Infer)?;
+
+				return Ok(Inferrable::wrapped_type(type_term));
+			},
+
+			_ => {
+				return Err(ExprError::InvalidSyntax(
+					format!("wrapped expects: T, got {} elements", syntax.len())
+				));
+			}
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

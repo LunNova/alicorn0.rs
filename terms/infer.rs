@@ -195,8 +195,19 @@ pub fn type_of_value(value: &FlexValue) -> FlexValue {
 		FlexValue::HostString { .. } => FlexValue::HostStringType,
 		FlexValue::HostBool { .. } => FlexValue::HostBoolType,
 
-		// Type values are types of types (Star)
-		FlexValue::HostNumberType | FlexValue::HostStringType | FlexValue::HostBoolType => FlexValue::Star { level: 0, depth: 1 },
+		// Type values are types of types (Star or HostTypeType)
+		FlexValue::HostNumberType | FlexValue::HostStringType | FlexValue::HostBoolType => FlexValue::HostTypeType,
+
+		// HostTypeType : Star
+		FlexValue::HostTypeType => FlexValue::Star { level: 1, depth: 1 },
+
+		// wrapped(T) : host-type
+		FlexValue::HostWrappedType { .. } => FlexValue::HostTypeType,
+
+		// A wrapped value has type wrapped(T)
+		FlexValue::HostWrappedValue { type_val, .. } => FlexValue::HostWrappedType {
+			type_val: type_val.clone(),
+		},
 
 		// Operative type: its type is... also Star (it's a type)
 		FlexValue::OperativeType { .. } => FlexValue::Star { level: 0, depth: 1 },

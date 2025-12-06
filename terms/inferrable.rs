@@ -147,6 +147,29 @@ impl Inferrable {
 		})
 	}
 
+	/// Create a wrapped type: wrapped(T)
+	pub fn wrapped_type(inner_type: Inferrable) -> Self {
+		Self::with_dummy_span(InferrableKind::HostWrappedType {
+			inner_type: Box::new(inner_type),
+		})
+	}
+
+	/// Create a wrap term: wrap T x
+	pub fn host_wrap(wrap_type: Inferrable, content: Inferrable) -> Self {
+		Self::with_dummy_span(InferrableKind::HostWrap {
+			wrap_type: Box::new(wrap_type),
+			content: Box::new(content),
+		})
+	}
+
+	/// Create an unwrap term: unwrap T x
+	pub fn host_unwrap(unwrap_type: Inferrable, container: Inferrable) -> Self {
+		Self::with_dummy_span(InferrableKind::HostUnwrap {
+			unwrap_type: Box::new(unwrap_type),
+			container: Box::new(container),
+		})
+	}
+
 	/// Create a pre-elaborated operative term.
 	/// The type is OperativeType { handler, unit_type }
 	/// The value is OperativeCons { handler, unit }
@@ -242,6 +265,21 @@ pub enum InferrableKind {
 
 	/// Host intrinsic reference
 	HostIntrinsic { name: String, intrinsic_type: Box<Inferrable> },
+
+	/// wrapped(T) - the type of wrapped values of type T
+	HostWrappedType { inner_type: Box<Inferrable> },
+
+	/// wrap T x - wrap a value of type T
+	HostWrap {
+		wrap_type: Box<Inferrable>,
+		content: Box<Inferrable>,
+	},
+
+	/// unwrap T x - unwrap a wrapped value
+	HostUnwrap {
+		unwrap_type: Box<Inferrable>,
+		container: Box<Inferrable>,
+	},
 	// TODO: More variants as needed:
 	// - TupleElim, TupleType
 	// - RecordElim, RecordType

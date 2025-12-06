@@ -1,0 +1,10 @@
+# Test wrap/unwrap/wrapped
+
+# Create a wrapped number
+let wrapped-num = wrap Number 42
+
+# Unwrap it
+let extracted = unwrap Number wrapped-num
+
+# Return the extracted value
+extracted

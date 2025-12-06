@@ -46,6 +46,21 @@ pub enum Elaborated {
 	/// Type annotation (the term, checked against type)
 	/// Useful for literals that need a specific type
 	Annotated { term: Box<Elaborated>, ty: Box<Elaborated> },
+
+	/// wrapped(T) - the type of wrapped values of type T
+	HostWrappedType { type_term: Box<Elaborated> },
+
+	/// wrap T x - wraps a value x of type T, producing wrapped(T)
+	HostWrap {
+		type_term: Box<Elaborated>,
+		content: Box<Elaborated>,
+	},
+
+	/// unwrap T x - unwraps a value of type wrapped(T), producing T
+	HostUnwrap {
+		type_term: Box<Elaborated>,
+		container: Box<Elaborated>,
+	},
 }
 
 impl Elaborated {

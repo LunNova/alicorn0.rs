@@ -237,6 +237,55 @@ pub fn elaborate(term: &Inferrable, ctx: &TypingContext) -> CheckResult<(Elabora
 			Ok((Elaborated::Literal(pi_val.clone()), FlexValue::Star { level: 0, depth: 1 }))
 		}
 
+		// wrapped(T) - type constructor for wrapped types
+		InferrableKind::HostWrappedType { inner_type } => {
+			let (inner_elab, _) = elaborate(inner_type, ctx)?;
+
+			// The type of wrapped(T) is host-type
+			Ok((
+				Elaborated::HostWrappedType {
+					type_term: Box::new(inner_elab),
+				},
+				FlexValue::HostTypeType,
+			))
+		}
+
+		// wrap T x - wrap a value
+		InferrableKind::HostWrap { wrap_type, content } => {
+			let (type_elab, _) = elaborate(wrap_type, ctx)?;
+			let type_val = evaluate(&type_elab, &EvalEnv::new());
+			let (content_elab, _content_type) = elaborate(content, ctx)?;
+
+			// The result type is wrapped(T)
+			let result_type = FlexValue::HostWrappedType {
+				type_val: Box::new(type_val),
+			};
+
+			Ok((
+				Elaborated::HostWrap {
+					type_term: Box::new(type_elab),
+					content: Box::new(content_elab),
+				},
+				result_type,
+			))
+		}
+
+		// unwrap T x - unwrap a value
+		InferrableKind::HostUnwrap { unwrap_type, container } => {
+			let (type_elab, _) = elaborate(unwrap_type, ctx)?;
+			let type_val = evaluate(&type_elab, &EvalEnv::new());
+			let (container_elab, _container_type) = elaborate(container, ctx)?;
+
+			// The result type is T (the unwrapped type)
+			Ok((
+				Elaborated::HostUnwrap {
+					type_term: Box::new(type_elab),
+					container: Box::new(container_elab),
+				},
+				type_val,
+			))
+		}
+
 		// Not yet implemented
 		_ => Err(CheckError::NotImplemented(format!(
 			"Elaboration for {:?}",

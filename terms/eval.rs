@@ -107,6 +107,43 @@ pub fn evaluate(term: &Elaborated, env: &Env) -> FlexValue {
 			// Type annotation doesn't affect runtime - just evaluate the term
 			evaluate(term, env)
 		}
+
+		Elaborated::HostWrappedType { type_term } => {
+			// Evaluate the inner type and construct the wrapped type
+			let type_val = evaluate(type_term, env);
+			FlexValue::HostWrappedType {
+				type_val: Box::new(type_val),
+			}
+		}
+
+		Elaborated::HostWrap { type_term, content } => {
+			// Evaluate type and content, produce wrapped value
+			let type_val = evaluate(type_term, env);
+			let content_val = evaluate(content, env);
+			FlexValue::HostWrappedValue {
+				type_val: Box::new(type_val),
+				content: Box::new(content_val),
+			}
+		}
+
+		Elaborated::HostUnwrap { type_term: _, container } => {
+			// Evaluate the container and extract the content
+			let container_val = evaluate(container, env);
+			match container_val {
+				FlexValue::HostWrappedValue { content, .. } => *content,
+				// If container is stuck, unwrap is stuck too
+				other => FlexValue::StuckValue(
+					crate::value::StuckValue::Application {
+						// Represent stuck unwrap as application
+						func: Box::new(FlexValue::HostString {
+							value: "#unwrap".to_string(),
+						}),
+						arg: Box::new(other),
+					},
+					(),
+				),
+			}
+		}
 	}
 }
 
