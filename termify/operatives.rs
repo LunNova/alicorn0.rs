@@ -20,7 +20,26 @@ use crate::{Env, ExprError, Goal, Result, expression};
 fn expect_symbol(elem: &Element) -> Result<&str> {
 	match elem {
 		Element::Symbol(s) => Ok(s.as_str()),
-		_ => Err(ExprError::InvalidSyntax(format!("Expected symbol, got {:?}", elem))),
+		Element::List(inner) => {
+			// Give a helpful hint if it looks like a typed binding
+			let preview: String = inner
+				.iter()
+				.take(5)
+				.map(|e| match e {
+					Element::Symbol(s) => s.to_string(),
+					Element::Number(n) => n.to_string(),
+					Element::List(_) => "(..)".to_string(),
+					_ => "..".to_string(),
+				})
+				.collect::<Vec<_>>()
+				.join(" ");
+			Err(ExprError::InvalidSyntax(format!(
+				"expected a name, got a list: ({}) - maybe wrong operative? \
+				 (lambda takes untyped param, lambda_single takes (name : type))",
+				preview
+			)))
+		}
+		_ => Err(ExprError::InvalidSyntax(format!("expected a symbol/name, got {:?}", elem))),
 	}
 }
 
@@ -127,30 +146,67 @@ pub fn arrow_operative(syntax: &FormatList, _env: &mut Env, _goal: Goal) -> Resu
 	}
 }
 
-/// Lambda operative: `lambda (params...) body` or just for explicit lambda keyword
-pub fn lambda_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
-	format_matcher! {
-		match syntax {
-			// lambda param body
-			(~param~, ~body...~) => {
-				let param_name = expect_symbol(param)?;
+/// Lambda operative: `lambda param body` or `lambda (param : type) body`
+///
+/// Smart lambda that detects whether param is typed or untyped:
+/// - `lambda x body` → untyped param (type will be inferred)
+/// - `lambda (x : T) body` → typed param (like lambda_single)
+pub fn lambda_operative(syntax: &FormatList, env: &mut Env, goal: Goal) -> Result<Inferrable> {
+	if syntax.is_empty() {
+		return Err(ExprError::InvalidSyntax("lambda expects: param body".to_string()));
+	}
 
-				// Create new env with param bound
-				// Use Lua approach: store de Bruijn level (0-indexed) at bind time
+	let first = &syntax[0];
+	let rest = syntax.clone().slice(1..);
+
+	match first {
+		// Typed param: (x : T) → delegate to lambda_single logic
+		Element::List(inner) => {
+			// Check if it looks like a typed binding (has : somewhere)
+			let has_colon = inner.iter().any(|e| matches!(e, Element::Symbol(s) if s == ":"));
+
+			if has_colon {
+				// Typed param - use lambda_single logic
+				if inner.len() < 3 {
+					return Err(ExprError::InvalidSyntax("typed param should be (name : type)".to_string()));
+				}
+				let param_name = expect_symbol(&inner[0])?;
+				let type_syntax = inner.clone().slice(2..);
+				let type_term = expression(&type_syntax, env, Goal::Infer)?;
+
 				let mut body_env = env.clone();
 				body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
 				body_env.depth += 1;
 
-				let body_term = expression(&body, &mut body_env, Goal::Infer)?;
+				let body_term = expression(&rest, &mut body_env, goal)?;
 
-				return Ok(Inferrable::lambda(param_name, None, body_term));
-			},
-
-			_ => {
+				return Ok(Inferrable::lambda(param_name, Some(Box::new(type_term)), body_term));
+			} else {
+				// List but no colon - could be multi-param tuple syntax (not yet supported)
 				return Err(ExprError::InvalidSyntax(
-					format!("lambda expects: param body, got {} elements", syntax.len())
+					"lambda with list param but no ':' - multi-param tuple syntax not yet supported".to_string(),
 				));
 			}
+		}
+
+		// Untyped param: just a symbol
+		Element::Symbol(param_name) => {
+			let param_name = param_name.as_str();
+
+			let mut body_env = env.clone();
+			body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
+			body_env.depth += 1;
+
+			let body_term = expression(&rest, &mut body_env, goal)?;
+
+			return Ok(Inferrable::lambda(param_name, None, body_term));
+		}
+
+		_ => {
+			return Err(ExprError::InvalidSyntax(format!(
+				"lambda param must be a name or (name : type), got {:?}",
+				first
+			)));
 		}
 	}
 }

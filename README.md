@@ -21,11 +21,12 @@ Taking this opportunity to simplify some decisions. No metalanguage, less differ
   - [x] K combinator works end-to-end
 
 - [ ] **Operatives** - Syntax transformers
-  - [x] `let`, `fn`, `forall`, `:`, `type`, `type_`, `lambda_curry`
-  - [x] `lambda_implicit`
+  - [x] `let`, `forall`, `:`, `type`, `type_`
+  - [x] `lambda` (smart: handles both `lambda x` and `lambda (x : T)`)
+  - [x] `lambda_single`, `lambda_implicit`, `lambda_curry`
   - [x] `wrap`/`unwrap`/`wrapped` (host type wrapping)
-  - [ ] `lambda_single`, `lambda_annotated`
-  - [ ] `intrinsic` (host escape hatch)
+  - [x] `intrinsic` (named intrinsics with Lua compat fallback)
+  - [ ] `lambda_annotated`, `lambda-prog`
   - [ ] `mk`, `switch`, `enum` (data construction)
   - [ ] `record`, `record-of`
 
@@ -35,7 +36,12 @@ Taking this opportunity to simplify some decisions. No metalanguage, less differ
   - [ ] Subtyping (ranges, variance, union/intersection)
   - [ ] Implicit argument inference
 
+- [ ] **Error handling**
+  - [x] Basic error messages with operative hints
+  - [ ] Source span tracking in errors
+
 - [ ] **Run prelude.alc** - The ultimate integration test
+  - Gets past intrinsics, now blocked on type inference
 
 ## Commands
 
