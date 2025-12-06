@@ -178,6 +178,24 @@ pub fn infer(term: &Inferrable, ctx: &TypingContext) -> InferResult<FlexValue> {
 			Ok(FlexValue::Star { level: 0, depth: 1 })
 		}
 
+		// wrapped(T) - type constructor, its type is host-type
+		InferrableKind::HostWrappedType { .. } => Ok(FlexValue::HostTypeType),
+
+		// wrap T x - wrapping a value, type is wrapped(T)
+		InferrableKind::HostWrap { wrap_type, .. } => {
+			// Need to evaluate wrap_type to get the actual type
+			let type_type = infer(wrap_type, ctx)?;
+			Ok(FlexValue::HostWrappedType {
+				type_val: Box::new(type_type),
+			})
+		}
+
+		// unwrap T x - unwrapping, type is T
+		InferrableKind::HostUnwrap { unwrap_type, .. } => infer(unwrap_type, ctx),
+
+		// Host intrinsic - type comes from the annotation
+		InferrableKind::HostIntrinsic { intrinsic_type, .. } => infer(intrinsic_type, ctx),
+
 		// Other cases not yet implemented
 		_ => Err(InferError::NotYetImplemented(format!(
 			"Inference for {:?}",

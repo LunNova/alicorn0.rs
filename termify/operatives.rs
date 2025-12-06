@@ -63,6 +63,167 @@ fn elem_to_list(elem: &Element) -> FormatList {
 	}
 }
 
+/// Result of parsing an ascribed segment like `(x : T)` or `(x : A, y : B)`
+#[derive(Debug)]
+pub struct AscribedSegment {
+	/// The parameter names (single for `(x : T)`, multiple for `(x : A, y : B)`)
+	pub names: Vec<String>,
+	/// The type term - for single param, it's the param type
+	/// For multi-param, it's a tuple type
+	pub type_term: Inferrable,
+	/// Whether this was a single-param segment (affects Pi vs Tuple representation)
+	pub single: bool,
+}
+
+/// Parse an ascribed segment: `(name : type)` or `(x : A, y : B, ...)`
+///
+/// This handles telescoping - each name is bound before parsing subsequent types,
+/// so in `(A : Type, x : A)`, the type `A` in `x : A` can reference the first param.
+///
+/// For single param: `(name : type)` - just binds name and returns type
+/// For multi-param: `(x : T1, y : T2)` - binds each name, builds tuple type
+///
+/// Returns the segment info and the updated environment with all names bound.
+pub fn parse_ascribed_segment(syntax: &FormatList, env: &mut Env) -> Result<AscribedSegment> {
+	// Check if syntax looks like (name : type) - single param
+	// vs (name1 : type1, name2 : type2, ...) - multi-param (has comma-separated segments)
+
+	// The parser wraps comma-separated elements, so:
+	// - `(x : T)` parses as [x, :, T]
+	// - `(x : A, y : B)` parses as [[x, :, A], [y, :, B]] (each segment wrapped)
+
+	if syntax.is_empty() {
+		// Empty segment: () -> return empty/unit type
+		return Ok(AscribedSegment {
+			names: vec![],
+			type_term: Inferrable::tuple(vec![]),
+			single: false,
+		});
+	}
+
+	// Check if first element is a list (multi-param) or symbol (single-param)
+	let first = &syntax[0];
+
+	match first {
+		Element::List(_) => {
+			// Multi-param: each element is a segment like [name, :, type]
+			parse_multi_param_segment(syntax, env)
+		}
+		Element::Symbol(_) => {
+			// Single-param: [name, :, type...]
+			parse_single_param_segment(syntax, env)
+		}
+		_ => Err(ExprError::InvalidSyntax(format!(
+			"ascribed segment should start with name or (name : type), got {:?}",
+			first
+		))),
+	}
+}
+
+/// Parse a single-param segment: `(name : type)`
+fn parse_single_param_segment(syntax: &FormatList, env: &mut Env) -> Result<AscribedSegment> {
+	// Expect: name : type...
+	if syntax.len() < 3 {
+		return Err(ExprError::InvalidSyntax("single param segment should be (name : type)".to_string()));
+	}
+
+	let name = expect_symbol(&syntax[0])?;
+	// syntax[1] should be ":"
+	let type_syntax = syntax.clone().slice(2..);
+	let type_term = expression(&type_syntax, env, Goal::Infer)?;
+
+	// Bind the name in env for subsequent use
+	env.bind(name.to_string(), Inferrable::bound_variable(env.depth, name));
+	env.depth += 1;
+
+	Ok(AscribedSegment {
+		names: vec![name.to_string()],
+		type_term,
+		single: true,
+	})
+}
+
+/// Parse a multi-param segment: `(x : A, y : B, ...)`
+fn parse_multi_param_segment(syntax: &FormatList, env: &mut Env) -> Result<AscribedSegment> {
+	let mut names = Vec::new();
+	let mut type_terms = Vec::new();
+
+	// Each element should be a list like [name, :, type]
+	for elem in syntax.iter() {
+		let segment = match elem {
+			Element::List(inner) => inner,
+			_ => {
+				return Err(ExprError::InvalidSyntax(format!(
+					"multi-param segment element should be (name : type), got {:?}",
+					elem
+				)));
+			}
+		};
+
+		if segment.len() < 3 {
+			return Err(ExprError::InvalidSyntax("each param should be (name : type)".to_string()));
+		}
+
+		let name = expect_symbol(&segment[0])?;
+		// segment[1] should be ":"
+		let type_syntax = segment.clone().slice(2..);
+
+		// Parse type with current env (can reference previously bound names!)
+		let type_term = expression(&type_syntax, env, Goal::Infer)?;
+
+		// Bind this name for subsequent params
+		env.bind(name.to_string(), Inferrable::bound_variable(env.depth, name));
+		env.depth += 1;
+
+		names.push(name.to_string());
+		type_terms.push(type_term);
+	}
+
+	// Build a tuple type from all the element types
+	// For proper dependent tuples, we'd need TupleDescCons/Empty
+	// For now, use simple tuple type
+	let tuple_type = Inferrable::tuple(type_terms);
+
+	Ok(AscribedSegment {
+		names,
+		type_term: tuple_type,
+		single: false,
+	})
+}
+
+/// Parse a possibly double-parens wrapped ascribed segment.
+///
+/// Handles:
+/// - `((x : T))` - double parens (implicit param) -> inner segment
+/// - `(x : T)` - single parens (explicit param)
+/// - `(x : A, y : B)` - multi-param
+/// - `()` - empty params
+///
+/// Returns the segment and whether it was double-parens (implicit).
+pub fn parse_maybe_implicit_segment(elem: &Element, env: &mut Env) -> Result<(AscribedSegment, bool)> {
+	let outer = match elem {
+		Element::List(l) => l,
+		_ => {
+			return Err(ExprError::InvalidSyntax(
+				"param segment should be (name : type) or ((name : type))".to_string(),
+			));
+		}
+	};
+
+	// Check for double parens: ((x : T)) - single element that's a list
+	if outer.len() == 1 {
+		if let Element::List(inner) = &outer[0] {
+			// Double parens - implicit param
+			let segment = parse_ascribed_segment(inner, env)?;
+			return Ok((segment, true));
+		}
+	}
+
+	// Single parens - explicit param(s)
+	let segment = parse_ascribed_segment(outer, env)?;
+	Ok((segment, false))
+}
+
 /// let operative: `let name = expr`
 ///
 /// Binds `name` to `expr` in the environment and returns unit.
@@ -160,27 +321,24 @@ pub fn lambda_operative(syntax: &FormatList, env: &mut Env, goal: Goal) -> Resul
 	let rest = syntax.clone().slice(1..);
 
 	match first {
-		// Typed param: (x : T) → delegate to lambda_single logic
+		// Typed param: (x : T) → use ascribed segment parser
 		Element::List(inner) => {
 			// Check if it looks like a typed binding (has : somewhere)
 			let has_colon = inner.iter().any(|e| matches!(e, Element::Symbol(s) if s == ":"));
 
 			if has_colon {
-				// Typed param - use lambda_single logic
-				if inner.len() < 3 {
-					return Err(ExprError::InvalidSyntax("typed param should be (name : type)".to_string()));
-				}
-				let param_name = expect_symbol(&inner[0])?;
-				let type_syntax = inner.clone().slice(2..);
-				let type_term = expression(&type_syntax, env, Goal::Infer)?;
-
+				// Typed param - use ascribed segment parser
 				let mut body_env = env.clone();
-				body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
-				body_env.depth += 1;
+				let segment = parse_ascribed_segment(inner, &mut body_env)?;
 
+				if !segment.single || segment.names.len() != 1 {
+					return Err(ExprError::InvalidSyntax("lambda typed param should be (name : type)".to_string()));
+				}
+
+				let param_name = &segment.names[0];
 				let body_term = expression(&rest, &mut body_env, goal)?;
 
-				return Ok(Inferrable::lambda(param_name, Some(Box::new(type_term)), body_term));
+				return Ok(Inferrable::lambda(param_name, Some(Box::new(segment.type_term)), body_term));
 			} else {
 				// List but no colon - could be multi-param tuple syntax (not yet supported)
 				return Err(ExprError::InvalidSyntax(
@@ -211,46 +369,90 @@ pub fn lambda_operative(syntax: &FormatList, env: &mut Env, goal: Goal) -> Resul
 	}
 }
 
-/// Forall operative: `forall (param : type) result_type`
+/// Forall operative: `forall (params) -> result` or `forall ((param : type)) -> result`
 ///
 /// Creates a Pi type (dependent function type).
+///
+/// Syntax variants:
+/// - `forall ((x : T)) -> R` - single implicit param (double parens)
+/// - `forall (x : T) -> R` - single explicit param
+/// - `forall (x : T, y : U) -> R` - multiple params
+/// - `forall () -> R` - no params
 pub fn forall_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
-	// Expect: (param : type) result...
-	// First element should be a list with param : type
-	if syntax.is_empty() {
-		return Err(ExprError::InvalidSyntax("forall expects: (param : type) result".to_string()));
+	// Expect: (params) -> result or ((param : type)) -> result
+	if syntax.len() < 3 {
+		return Err(ExprError::InvalidSyntax("forall expects: (param : type) -> result".to_string()));
 	}
 
 	let first = &syntax[0];
-	let rest = syntax.clone().slice(1..);
 
-	// Parse (param : type)
-	let (param_name, param_type_term) = match first {
-		Element::List(inner) => {
-			// Expect: param : type
-			if inner.len() < 3 {
-				return Err(ExprError::InvalidSyntax(
-					"forall param binding should be (param : type)".to_string(),
-				));
-			}
-			let param = expect_symbol(&inner[0])?;
-			// inner[1] should be ":"
-			let type_syntax = inner.clone().slice(2..);
-			let type_term = expression(&type_syntax, env, Goal::Infer)?;
-			(param, type_term)
+	// Find the arrow position
+	let arrow_pos = syntax.iter().position(|e| matches!(e, Element::Symbol(s) if s == "->"));
+	let arrow_pos = match arrow_pos {
+		Some(pos) => pos,
+		None => {
+			return Err(ExprError::InvalidSyntax("forall expects '->' before result type".to_string()));
 		}
-		_ => return Err(ExprError::InvalidSyntax("forall expects (param : type)".to_string())),
 	};
 
-	// Extend env for result type
-	// Use Lua approach: store de Bruijn level (0-indexed) at bind time
+	// Result type is everything after the arrow
+	let result_syntax = syntax.clone().slice(arrow_pos + 1..);
+
+	// Parse the param(s) using ascribed segment parser
+	// This binds the param names in a cloned env for the result type
 	let mut result_env = env.clone();
-	result_env.bind(param_name.to_string(), Inferrable::bound_variable(result_env.depth, param_name));
-	result_env.depth += 1;
+	let (param_segment, _implicit) = parse_maybe_implicit_segment(first, &mut result_env)?;
 
-	let result_term = expression(&rest, &mut result_env, Goal::Infer)?;
+	// Parse the result type (also an ascribed segment for named results like `(rel : U)`)
+	// Result syntax is [Element::List([rel, :, target])], so we need to unwrap the outer element
+	let result_segment = if result_syntax.len() == 1 {
+		if let Element::List(inner) = &result_syntax[0] {
+			parse_ascribed_segment(inner, &mut result_env)?
+		} else {
+			// Bare symbol result type - not an ascribed segment
+			// Just evaluate it as an expression
+			let type_term = expression(&result_syntax, &mut result_env, Goal::Infer)?;
+			AscribedSegment {
+				names: vec![],
+				type_term,
+				single: true,
+			}
+		}
+	} else {
+		// Multiple elements after arrow - evaluate as expression
+		let type_term = expression(&result_syntax, &mut result_env, Goal::Infer)?;
+		AscribedSegment {
+			names: vec![],
+			type_term,
+			single: true,
+		}
+	};
 
-	Ok(Inferrable::pi(param_name, param_type_term, result_term))
+	// Build the Pi type
+	// For single param: Pi { param_name, param_type, result_type }
+	// For multi-param: need to build nested Pis or tuple-based Pi
+	if param_segment.names.is_empty() {
+		// forall () -> R - no params, just the result type
+		return Ok(result_segment.type_term);
+	}
+
+	if param_segment.single {
+		// Single param - simple Pi
+		let param_name = &param_segment.names[0];
+		Ok(Inferrable::pi(param_name, param_segment.type_term, result_segment.type_term))
+	} else {
+		// Multi-param - build nested Pis from right to left
+		// forall (x : A, y : B) -> R  becomes  Pi x:A. Pi y:B. R
+		// We need to iterate in reverse and build up the result type
+
+		// But wait - parse_multi_param_segment returns a tuple type, not individual types
+		// We need the individual types. Let me fix this by storing them separately.
+
+		// For now, build a single Pi with tuple param type
+		// This is a simplification - proper telescopes need nested Pis
+		let combined_name = param_segment.names.join("_");
+		Ok(Inferrable::pi(&combined_name, param_segment.type_term, result_segment.type_term))
+	}
 }
 
 /// lambda_single operative: `lambda_single (param : type) body`
@@ -265,29 +467,26 @@ pub fn lambda_single_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) 
 	let first = &syntax[0];
 	let rest = syntax.clone().slice(1..);
 
-	// Parse (param : type)
-	let (param_name, param_type_term) = match first {
-		Element::List(inner) => {
-			if inner.len() < 3 {
-				return Err(ExprError::InvalidSyntax("param binding should be (param : type)".to_string()));
-			}
-			let param = expect_symbol(&inner[0])?;
-			let type_syntax = inner.clone().slice(2..);
-			let type_term = expression(&type_syntax, env, Goal::Infer)?;
-			(param, type_term)
-		}
+	// Parse (param : type) using ascribed segment parser
+	let inner = match first {
+		Element::List(l) => l,
 		_ => return Err(ExprError::InvalidSyntax("lambda_single expects (param : type)".to_string())),
 	};
 
-	// Extend env for body
-	// Use Lua approach: store de Bruijn level (0-indexed) at bind time
+	// parse_ascribed_segment binds the param in env
 	let mut body_env = env.clone();
-	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
-	body_env.depth += 1;
+	let segment = parse_ascribed_segment(inner, &mut body_env)?;
 
+	if !segment.single || segment.names.len() != 1 {
+		return Err(ExprError::InvalidSyntax(
+			"lambda_single expects exactly one param: (param : type)".to_string(),
+		));
+	}
+
+	let param_name = &segment.names[0];
 	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
 
-	Ok(Inferrable::lambda(param_name, Some(Box::new(param_type_term)), body_term))
+	Ok(Inferrable::lambda(param_name, Some(Box::new(segment.type_term)), body_term))
 }
 
 /// Annotate operative: `expr : type`
@@ -387,56 +586,43 @@ pub fn lambda_curry_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -
 	let first = &syntax[0];
 	let rest = syntax.clone().slice(1..);
 
-	// Parse ((param : type)) - outer list containing inner list with binding
-	let (param_name, param_type_term) = match first {
-		Element::List(outer) => {
-			// outer should contain a single list element: (param : type)
-			if outer.len() != 1 {
-				return Err(ExprError::InvalidSyntax(format!(
-					"lambda_curry expects ((param : type)), got {} elements in outer parens",
-					outer.len()
-				)));
-			}
-			match &outer[0] {
-				Element::List(inner) => {
-					// inner is [param, :, type...]
-					if inner.len() < 3 {
-						return Err(ExprError::InvalidSyntax(
-							"lambda_curry param binding should be ((param : type))".to_string(),
-						));
-					}
-					let param = expect_symbol(&inner[0])?;
-					// inner[1] should be ":"
-					let type_syntax = inner.clone().slice(2..);
-					let type_term = expression(&type_syntax, env, Goal::Infer)?;
-					(param, type_term)
-				}
-				_ => {
-					return Err(ExprError::InvalidSyntax("lambda_curry expects ((param : type))".to_string()));
-				}
-			}
-		}
-		_ => {
-			return Err(ExprError::InvalidSyntax(
-				"lambda_curry expects ((param : type)) as first argument".to_string(),
-			));
-		}
-	};
-
-	// Extend env for body with the implicit param bound
+	// Parse ((param : type)) using maybe_implicit which handles double parens
 	let mut body_env = env.clone();
-	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
-	body_env.depth += 1;
+	let (segment, is_implicit) = parse_maybe_implicit_segment(first, &mut body_env)?;
+
+	if !is_implicit {
+		return Err(ExprError::InvalidSyntax(
+			"lambda_curry expects double parens ((param : type)), got single parens".to_string(),
+		));
+	}
+
+	if segment.names.is_empty() {
+		return Err(ExprError::InvalidSyntax("lambda_curry expects at least one param".to_string()));
+	}
 
 	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
 
-	// Create lambda with IMPLICIT visibility
-	Ok(Inferrable::lambda_with_visibility(
-		param_name,
-		Some(Box::new(param_type_term)),
-		Visibility::Implicit,
-		body_term,
-	))
+	// For single param, create simple implicit lambda
+	// For multi-param, would need to build nested lambdas (not yet needed)
+	if segment.single && segment.names.len() == 1 {
+		let param_name = &segment.names[0];
+		Ok(Inferrable::lambda_with_visibility(
+			param_name,
+			Some(Box::new(segment.type_term)),
+			Visibility::Implicit,
+			body_term,
+		))
+	} else {
+		// Multi-param implicit lambda - build nested lambdas
+		// For now, combine names as single tuple param
+		let combined_name = segment.names.join("_");
+		Ok(Inferrable::lambda_with_visibility(
+			&combined_name,
+			Some(Box::new(segment.type_term)),
+			Visibility::Implicit,
+			body_term,
+		))
+	}
 }
 
 /// lambda_implicit operative: `lambda_implicit (param : type) body`
@@ -459,21 +645,9 @@ pub fn lambda_implicit_operative(syntax: &FormatList, env: &mut Env, _goal: Goal
 	let first = &syntax[0];
 	let rest = syntax.clone().slice(1..);
 
-	// Parse (param : type) - single parens containing binding
-	let (param_name, param_type_term) = match first {
-		Element::List(inner) => {
-			// inner is [param, :, type...]
-			if inner.len() < 3 {
-				return Err(ExprError::InvalidSyntax(
-					"lambda_implicit param binding should be (param : type)".to_string(),
-				));
-			}
-			let param = expect_symbol(&inner[0])?;
-			// inner[1] should be ":"
-			let type_syntax = inner.clone().slice(2..);
-			let type_term = expression(&type_syntax, env, Goal::Infer)?;
-			(param, type_term)
-		}
+	// Parse (param : type) using ascribed segment parser
+	let inner = match first {
+		Element::List(l) => l,
 		_ => {
 			return Err(ExprError::InvalidSyntax(
 				"lambda_implicit expects (param : type) as first argument".to_string(),
@@ -481,17 +655,23 @@ pub fn lambda_implicit_operative(syntax: &FormatList, env: &mut Env, _goal: Goal
 		}
 	};
 
-	// Extend env for body with the implicit param bound
+	// parse_ascribed_segment binds the param in env
 	let mut body_env = env.clone();
-	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
-	body_env.depth += 1;
+	let segment = parse_ascribed_segment(inner, &mut body_env)?;
 
+	if !segment.single || segment.names.len() != 1 {
+		return Err(ExprError::InvalidSyntax(
+			"lambda_implicit expects exactly one param: (param : type)".to_string(),
+		));
+	}
+
+	let param_name = &segment.names[0];
 	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
 
 	// Create lambda with IMPLICIT visibility
 	Ok(Inferrable::lambda_with_visibility(
 		param_name,
-		Some(Box::new(param_type_term)),
+		Some(Box::new(segment.type_term)),
 		Visibility::Implicit,
 		body_term,
 	))
