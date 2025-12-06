@@ -541,41 +541,12 @@ not string"#;
 		}
 	}
 
+	/// Lua accepts """"" (5 quotes) due to a grammar quirk, treating the 5th quote
+	/// as string content. Spec says """"\n, so we reject content after """".
 	#[test]
-	#[ignore = "Penta quotes not yet supported - unclear if Lua behavior is correct"]
-	fn penta_quote_multiline_string() {
-		let input = r#"before """""
-	indented string line
-	more string
-not string"#;
-		eprintln!("{input}");
-		let result = lex(input).unwrap();
-
-		// Line 1: "before" and a multiline string token
-		// Line 2: "not string" (outside the multiline string)
-		assert_eq!(result.len(), 2);
-
-		let (indent, tokens) = &result[0];
-		assert_eq!(*indent, 0);
-		assert_eq!(tokens.len(), 3); // "before", whitespace, string
-
-		// Check that we have the expected tokens
-		assert_eq!(tokens[0], symbol!("before"));
-		assert_eq!(tokens[1], Item::Whitespace);
-
-		// Check the string content - should have leading quote from penta quotes
-		if let Item::String(content) = &tokens[2] {
-			// Penta quotes should include a leading quote character
-			assert_eq!(content, "\"indented string line\nmore string");
-		} else {
-			panic!("Expected a String token, got {:?}", tokens[2]);
-		}
-
-		// Second line should be outside the multiline string
-		let (indent, tokens) = &result[1];
-		assert_eq!(*indent, 0);
-		assert_eq!(tokens[0], symbol!("not"));
-		assert_eq!(tokens[2], symbol!("string"));
+	fn penta_quote_rejected() {
+		let input = "\"\"\"\"\"content";
+		assert!(lex(input).is_err());
 	}
 
 	#[test]
