@@ -75,6 +75,7 @@ impl Env {
 		env.bind("wrap", Inferrable::native_operative(NativeOperative::Wrap));
 		env.bind("unwrap", Inferrable::native_operative(NativeOperative::Unwrap));
 		env.bind("wrapped", Inferrable::native_operative(NativeOperative::Wrapped));
+		env.bind("intrinsic", Inferrable::native_operative(NativeOperative::Intrinsic));
 
 		// `type` is a literal: star(0, 0) with type star(1, 1)
 		env.bind(
@@ -269,6 +270,7 @@ fn call_operative(op: NativeOperative, syntax: FormatList, env: &mut Env, goal: 
 		NativeOperative::Wrap => wrap_operative(&syntax, env, goal),
 		NativeOperative::Unwrap => unwrap_operative(&syntax, env, goal),
 		NativeOperative::Wrapped => wrapped_operative(&syntax, env, goal),
+		NativeOperative::Intrinsic => intrinsic_operative(&syntax, env, goal),
 	}
 }
 

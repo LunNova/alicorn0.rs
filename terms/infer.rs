@@ -196,7 +196,15 @@ pub fn type_of_value(value: &FlexValue) -> FlexValue {
 		FlexValue::HostBool { .. } => FlexValue::HostBoolType,
 
 		// Type values are types of types (Star or HostTypeType)
-		FlexValue::HostNumberType | FlexValue::HostStringType | FlexValue::HostBoolType => FlexValue::HostTypeType,
+		FlexValue::HostNumberType
+		| FlexValue::HostStringType
+		| FlexValue::HostBoolType
+		| FlexValue::HostSyntaxType
+		| FlexValue::HostEnvironmentType
+		| FlexValue::HostGoalType
+		| FlexValue::HostInferrableTermType
+		| FlexValue::HostCheckableTermType
+		| FlexValue::HostErrorType => FlexValue::HostTypeType,
 
 		// HostTypeType : Star
 		FlexValue::HostTypeType => FlexValue::Star { level: 1, depth: 1 },

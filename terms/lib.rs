@@ -17,6 +17,7 @@ pub mod elaborated;
 pub mod eval;
 pub mod infer;
 pub mod inferrable;
+pub mod intrinsic_compat;
 pub mod value;
 
 // Re-exports for convenience
@@ -24,5 +25,5 @@ pub use check::{CheckError, elaborate};
 pub use elaborated::Elaborated;
 pub use eval::{Env, evaluate};
 pub use infer::{InferError, TypingContext, as_operative_type, infer, is_pi_type, type_of_value};
-pub use inferrable::{Inferrable, InferrableKind, Span, Visibility};
+pub use inferrable::{Inferrable, InferrableKind, Intrinsic, Span, Visibility};
 pub use value::{FlexValue, NativeOperative, SpannedName, StrictValue, StuckValue};

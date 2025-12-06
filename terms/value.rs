@@ -37,8 +37,10 @@ pub enum NativeOperative {
 	Unwrap,
 	/// wrapped(T) - the type of wrapped values of type T
 	Wrapped,
+	/// intrinsic "lua string" : type - host escape hatch
+	Intrinsic,
 	// TODO: More operatives as needed
-	// Mk, Switch, Enum, Intrinsic, etc.
+	// Mk, Switch, Enum, etc.
 }
 
 // FIXME: pattern-wishcast macro doesn't support doc comments inside, unfuck it later
@@ -106,6 +108,14 @@ pattern_wishcast! {
 		HostBoolType,
 		HostTypeType,
 
+		// Additional host types for intrinsics (prelude lines 43-50)
+		HostSyntaxType,
+		HostEnvironmentType,
+		HostGoalType,
+		HostInferrableTermType,
+		HostCheckableTermType,
+		HostErrorType,
+
 		HostWrappedType { type_val: Box<Self> },
 		HostWrappedValue { type_val: Box<Self>, content: Box<Self> },
 
@@ -132,6 +142,12 @@ pattern_wishcast! {
 		HostStringType |
 		HostBoolType |
 		HostTypeType |
+		HostSyntaxType |
+		HostEnvironmentType |
+		HostGoalType |
+		HostInferrableTermType |
+		HostCheckableTermType |
+		HostErrorType |
 		HostWrappedType { .. } |
 		HostWrappedValue { .. } |
 		OperativeType { .. } |

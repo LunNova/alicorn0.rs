@@ -9,6 +9,67 @@
 
 use crate::value::{FlexValue, NativeOperative, SpannedName};
 
+/// Named intrinsics - Rust implementations of host escapes.
+///
+/// These replace the Lua `intrinsic "lua code string"` with fixed named operations.
+/// Each variant corresponds to a specific host value or operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Intrinsic {
+	// Host type constants (lines 43-50 of prelude.alc)
+	/// `terms.strict_value.host_bool_type` → HostBoolType value
+	HostBoolType,
+	/// `terms.strict_value.host_string_type` → HostStringType value
+	HostStringType,
+	/// `terms.host_syntax_type` → the type for syntax objects
+	HostSyntaxType,
+	/// `terms.host_environment_type` → the type for environments
+	HostEnvironmentType,
+	/// `terms.host_goal_type` → the type for expression goals
+	HostGoalType,
+	/// `terms.host_inferrable_term_type` → the type for inferrable terms
+	HostInferrableTermType,
+	/// `terms.host_checkable_term_type` → the type for checkable terms
+	HostCheckableTermType,
+	/// `terms.host_lua_error_type` → the type for errors
+	HostErrorType,
+	// TODO: Add more intrinsics as needed:
+	// - gen_base_operator variants
+	// - host function intrinsics
+}
+
+impl Intrinsic {
+	/// Look up an intrinsic by name.
+	///
+	/// The name is used as a key to find the corresponding Rust implementation.
+	pub fn from_name(name: &str) -> Option<Self> {
+		match name.trim() {
+			"host-bool-type" => Some(Intrinsic::HostBoolType),
+			"host-string-type" => Some(Intrinsic::HostStringType),
+			"host-syntax-type" => Some(Intrinsic::HostSyntaxType),
+			"host-environment-type" => Some(Intrinsic::HostEnvironmentType),
+			"host-goal-type" => Some(Intrinsic::HostGoalType),
+			"host-inferrable-term-type" => Some(Intrinsic::HostInferrableTermType),
+			"host-checkable-term-type" => Some(Intrinsic::HostCheckableTermType),
+			"host-error-type" => Some(Intrinsic::HostErrorType),
+			_ => None,
+		}
+	}
+
+	/// Get the canonical name for this intrinsic (for debugging/display).
+	pub fn name(&self) -> &'static str {
+		match self {
+			Intrinsic::HostBoolType => "host-bool-type",
+			Intrinsic::HostStringType => "host-string-type",
+			Intrinsic::HostSyntaxType => "host-syntax-type",
+			Intrinsic::HostEnvironmentType => "host-environment-type",
+			Intrinsic::HostGoalType => "host-goal-type",
+			Intrinsic::HostInferrableTermType => "host-inferrable-term-type",
+			Intrinsic::HostCheckableTermType => "host-checkable-term-type",
+			Intrinsic::HostErrorType => "host-error-type",
+		}
+	}
+}
+
 /// Parameter visibility for lambdas and pi types.
 ///
 /// - `Explicit`: Must be passed at call site (normal function args)
@@ -170,6 +231,14 @@ impl Inferrable {
 		})
 	}
 
+	/// Create a host intrinsic reference
+	pub fn host_intrinsic(intrinsic: Intrinsic, intrinsic_type: Inferrable) -> Self {
+		Self::with_dummy_span(InferrableKind::HostIntrinsic {
+			intrinsic,
+			intrinsic_type: Box::new(intrinsic_type),
+		})
+	}
+
 	/// Create a pre-elaborated operative term.
 	/// The type is OperativeType { handler, unit_type }
 	/// The value is OperativeCons { handler, unit }
@@ -263,8 +332,11 @@ pub enum InferrableKind {
 		userdata: Box<Inferrable>,
 	},
 
-	/// Host intrinsic reference
-	HostIntrinsic { name: String, intrinsic_type: Box<Inferrable> },
+	/// Host intrinsic reference - named native operation
+	HostIntrinsic {
+		intrinsic: Intrinsic,
+		intrinsic_type: Box<Inferrable>,
+	},
 
 	/// wrapped(T) - the type of wrapped values of type T
 	HostWrappedType { inner_type: Box<Inferrable> },

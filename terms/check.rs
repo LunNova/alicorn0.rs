@@ -286,6 +286,29 @@ pub fn elaborate(term: &Inferrable, ctx: &TypingContext) -> CheckResult<(Elabora
 			))
 		}
 
+		// Host intrinsic - evaluate the intrinsic to its constant value
+		InferrableKind::HostIntrinsic { intrinsic, intrinsic_type } => {
+			use crate::inferrable::Intrinsic;
+
+			// Elaborate the type annotation
+			let (type_elab, _) = elaborate(intrinsic_type, ctx)?;
+			let result_type = evaluate(&type_elab, &EvalEnv::new());
+
+			// Get the constant value for this intrinsic
+			let value = match intrinsic {
+				Intrinsic::HostBoolType => FlexValue::HostBoolType,
+				Intrinsic::HostStringType => FlexValue::HostStringType,
+				Intrinsic::HostSyntaxType => FlexValue::HostSyntaxType,
+				Intrinsic::HostEnvironmentType => FlexValue::HostEnvironmentType,
+				Intrinsic::HostGoalType => FlexValue::HostGoalType,
+				Intrinsic::HostInferrableTermType => FlexValue::HostInferrableTermType,
+				Intrinsic::HostCheckableTermType => FlexValue::HostCheckableTermType,
+				Intrinsic::HostErrorType => FlexValue::HostErrorType,
+			};
+
+			Ok((Elaborated::Literal(value), result_type))
+		}
+
 		// Not yet implemented
 		_ => Err(CheckError::NotImplemented(format!(
 			"Elaboration for {:?}",

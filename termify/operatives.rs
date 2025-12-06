@@ -537,6 +537,55 @@ pub fn wrapped_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Res
 	}
 }
 
+/// intrinsic operative: `intrinsic "name" : type`
+///
+/// Host escape hatch - looks up a named native intrinsic and returns it
+/// with the specified type annotation.
+///
+/// Example: `intrinsic "host-bool-type" : wrapped(host-type)`
+pub fn intrinsic_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<Inferrable> {
+	use alicorn_terms::Intrinsic;
+
+	// Expect: "name" : type...
+	// Or: "name" ":" type... (if : is a separate symbol)
+	if syntax.len() < 3 {
+		return Err(ExprError::InvalidSyntax("intrinsic expects: \"name\" : type".to_string()));
+	}
+
+	// First element should be the intrinsic name (string literal)
+	let name = match &syntax[0] {
+		Element::String(s) => s.clone(),
+		other => {
+			return Err(ExprError::InvalidSyntax(format!(
+				"intrinsic name must be a string literal, got {:?}",
+				other
+			)));
+		}
+	};
+
+	// Second element should be ":"
+	match &syntax[1] {
+		Element::Symbol(s) if s == ":" => {}
+		other => {
+			return Err(ExprError::InvalidSyntax(format!(
+				"intrinsic expects ':' after name, got {:?}",
+				other
+			)));
+		}
+	}
+
+	// Rest is the type expression
+	let type_syntax = syntax.clone().slice(2..);
+	let type_term = expression(&type_syntax, env, Goal::Infer)?;
+
+	// Look up the intrinsic by name, with fallback to Lua compat strings
+	let intrinsic = Intrinsic::from_name(&name)
+		.or_else(|| alicorn_terms::intrinsic_compat::from_lua_string(&name))
+		.ok_or_else(|| ExprError::InvalidSyntax(format!("unknown intrinsic: \"{}\"", name)))?;
+
+	Ok(Inferrable::host_intrinsic(intrinsic, type_term))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
