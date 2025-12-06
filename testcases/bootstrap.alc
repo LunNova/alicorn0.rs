@@ -1,0 +1,21 @@
+# Bootstrap test - minimal expressions that work with current implementation
+
+# Literals
+42
+
+# Let binding with expression body
+let x = 5 in x
+
+# Nested let
+let a = 1 in (let b = 2 in a)
+
+# Identity function (indentation continues expression after =)
+let id = fn (n : Number)
+	n
+id 99
+
+# K combinator - returns first arg, ignores second
+let k = fn (x : Number)
+	fn (y : Number)
+		x
+(k 1) 2

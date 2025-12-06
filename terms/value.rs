@@ -5,8 +5,8 @@
 
 use pattern_wishcast::pattern_wishcast;
 
-// Forward declaration - actual type lives in typed.rs
-// We use Box<crate::typed::Term> in Closure
+// Forward declaration - actual type lives in elaborated.rs
+// We use Box<crate::elaborated::Elaborated> in Closure
 pub type SpannedName = String; // TODO: span + name
 
 /// Native operatives - Rust implementations of syntax transformers.
@@ -78,7 +78,7 @@ pattern_wishcast! {
 		},
 		Closure {
 			param_name: String,
-			body: Box<crate::typed::Term>,
+			body: Box<crate::elaborated::Elaborated>,
 			capture: Box<Self>,
 		},
 

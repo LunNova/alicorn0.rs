@@ -66,11 +66,11 @@ pub fn let_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Result<
 				return Ok(Inferrable::let_bind(name_str, expr_term, body_term));
 			},
 
-			// Simple binding: name = expr
-			(~name~, =, ~expr~) => {
+			// Simple binding: name = expr...
+			// Captures entire tail after = (like Lua's listtail)
+			(~name~, =, ~expr...~) => {
 				let name_str = expect_symbol(name)?;
-				let expr_list = elem_to_list(expr);
-				let expr_term = expression(&expr_list, env, Goal::Infer)?;
+				let expr_term = expression(&expr, env, Goal::Infer)?;
 
 				// Bind in environment
 				env.bind(name_str.to_string(), expr_term);
@@ -127,12 +127,11 @@ pub fn lambda_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Resu
 			(~param~, ~body...~) => {
 				let param_name = expect_symbol(param)?;
 
-				// Create new env with param bound (to a placeholder for now)
+				// Create new env with param bound
+				// Use Lua approach: store de Bruijn level (0-indexed) at bind time
 				let mut body_env = env.clone();
-				// For proper typing, we'd create a metavar here
-				// For now, just use a bound variable term
-				let param_term = Inferrable::bound_variable(0, param_name);
-				body_env.bind(param_name.to_string(), param_term);
+				body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
+				body_env.depth += 1;
 
 				let body_term = expression(&body, &mut body_env, Goal::Infer)?;
 
@@ -180,8 +179,10 @@ pub fn forall_operative(syntax: &FormatList, env: &mut Env, _goal: Goal) -> Resu
 	};
 
 	// Extend env for result type
+	// Use Lua approach: store de Bruijn level (0-indexed) at bind time
 	let mut result_env = env.clone();
-	result_env.bind(param_name.to_string(), Inferrable::bound_variable(0, param_name));
+	result_env.bind(param_name.to_string(), Inferrable::bound_variable(result_env.depth, param_name));
+	result_env.depth += 1;
 
 	let result_term = expression(&rest, &mut result_env, Goal::Infer)?;
 
@@ -215,8 +216,10 @@ pub fn annotated_lambda_operative(syntax: &FormatList, env: &mut Env, _goal: Goa
 	};
 
 	// Extend env for body
+	// Use Lua approach: store de Bruijn level (0-indexed) at bind time
 	let mut body_env = env.clone();
-	body_env.bind(param_name.to_string(), Inferrable::bound_variable(0, param_name));
+	body_env.bind(param_name.to_string(), Inferrable::bound_variable(body_env.depth, param_name));
+	body_env.depth += 1;
 
 	let body_term = expression(&rest, &mut body_env, Goal::Infer)?;
 

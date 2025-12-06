@@ -10,6 +10,10 @@ description = "FormatList to Term conversion for Alicorn"
 [lib]
 path = "lib.rs"
 
+[[bin]]
+name = "alicorn"
+path = "main.rs"
+
 [dependencies]
 alicorn-format = { path = "../format" }
 alicorn-terms = { path = "../terms" }

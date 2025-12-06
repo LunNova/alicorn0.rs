@@ -44,8 +44,8 @@ impl Inferrable {
 
 	// Convenience constructors
 
-	/// Create a pre-typed term (type already known)
-	pub fn typed(typ: crate::typed::Term, term: crate::typed::Term) -> Self {
+	/// Create a pre-elaborated term (type already known)
+	pub fn typed(typ: crate::elaborated::Elaborated, term: crate::elaborated::Elaborated) -> Self {
 		Self::with_dummy_span(InferrableKind::Typed {
 			typ: Box::new(typ),
 			term: Box::new(term),
@@ -122,11 +122,11 @@ impl Inferrable {
 		})
 	}
 
-	/// Create a pre-typed operative term.
+	/// Create a pre-elaborated operative term.
 	/// The type is OperativeType { handler, unit_type }
 	/// The value is OperativeCons { handler, unit }
 	pub fn native_operative(op: NativeOperative) -> Self {
-		use crate::typed::Term;
+		use crate::elaborated::Elaborated;
 
 		let unit_type = FlexValue::TupleType {
 			desc: Box::new(FlexValue::TupleValue { elements: vec![] }),
@@ -145,7 +145,7 @@ impl Inferrable {
 			userdata: Box::new(unit_val),
 		};
 
-		Self::typed(Term::Literal(op_type), Term::Literal(op_val))
+		Self::typed(Elaborated::Literal(op_type), Elaborated::Literal(op_val))
 	}
 }
 
@@ -155,8 +155,8 @@ pub enum InferrableKind {
 	/// Pre-elaborated term - type already known, no inference needed.
 	/// Used for built-in operatives and already-typechecked terms.
 	Typed {
-		typ: Box<crate::typed::Term>,
-		term: Box<crate::typed::Term>,
+		typ: Box<crate::elaborated::Elaborated>,
+		term: Box<crate::elaborated::Elaborated>,
 	},
 
 	/// Reference to a bound variable (de Bruijn index)

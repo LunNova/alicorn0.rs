@@ -102,11 +102,22 @@ pub fn infer(term: &Inferrable, ctx: &TypingContext) -> InferResult<FlexValue> {
 			Ok(evaluate(typ, &env))
 		}
 
-		// Bound variable: look up in typing context
-		InferrableKind::BoundVariable { index, debug_name } => ctx.lookup(*index).cloned().ok_or_else(|| InferError::UnboundVariable {
-			index: *index,
-			debug_name: debug_name.clone(),
-		}),
+		// Bound variable: convert level to index and look up in typing context
+		InferrableKind::BoundVariable { index: level, debug_name } => {
+			// Convert 0-indexed level to 0-indexed de Bruijn index
+			// Check bounds to avoid underflow
+			if *level >= ctx.len() {
+				return Err(InferError::UnboundVariable {
+					index: *level,
+					debug_name: debug_name.clone(),
+				});
+			}
+			let actual_index = ctx.len() - level - 1;
+			ctx.lookup(actual_index).cloned().ok_or_else(|| InferError::UnboundVariable {
+				index: actual_index,
+				debug_name: debug_name.clone(),
+			})
+		}
 
 		// Literal: synthesize type from value
 		InferrableKind::Literal(value) => Ok(type_of_value(value)),

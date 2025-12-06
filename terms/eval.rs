@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: 2025 Fundament Software SPC <https://fundament.software>
 
-//! Toy evaluator - reduces typed terms to values.
+//! Toy evaluator - reduces elaborated terms to values.
 //!
 //! This is a minimal skeleton evaluator that can handle:
 //! - Literals (already values)
@@ -17,7 +17,7 @@
 //!   - Operatives
 //!   - etc.
 
-use crate::typed::Term;
+use crate::elaborated::Elaborated;
 use crate::value::FlexValue;
 
 // Runtime environment - a stack of values for bound variables.
@@ -59,14 +59,14 @@ impl Env {
 	}
 }
 
-/// Evaluate a typed term to a value.
+/// Evaluate an elaborated term to a value.
 ///
 /// This is a toy evaluator - just enough to run basic lambda calculus.
-pub fn evaluate(term: &Term, env: &Env) -> FlexValue {
+pub fn evaluate(term: &Elaborated, env: &Env) -> FlexValue {
 	match term {
-		Term::Literal(val) => val.clone(),
+		Elaborated::Literal(val) => val.clone(),
 
-		Term::BoundVariable { index, debug_name } => {
+		Elaborated::BoundVariable { index, debug_name } => {
 			env.lookup(*index).cloned().unwrap_or_else(|| {
 				// Unbound variable - becomes a stuck value
 				FlexValue::StuckValue(
@@ -79,7 +79,7 @@ pub fn evaluate(term: &Term, env: &Env) -> FlexValue {
 			})
 		}
 
-		Term::Lambda { param_name, body } => {
+		Elaborated::Lambda { param_name, body } => {
 			// Create a closure capturing the current environment
 			// We store the entire env as a tuple in capture
 			FlexValue::Closure {
@@ -91,19 +91,19 @@ pub fn evaluate(term: &Term, env: &Env) -> FlexValue {
 			}
 		}
 
-		Term::Application { func, arg } => {
+		Elaborated::Application { func, arg } => {
 			let func_val = evaluate(func, env);
 			let arg_val = evaluate(arg, env);
 
 			apply(func_val, arg_val)
 		}
 
-		Term::TupleCons { elements } => {
+		Elaborated::TupleCons { elements } => {
 			let vals: Vec<FlexValue> = elements.iter().map(|e| evaluate(e, env)).collect();
 			FlexValue::TupleValue { elements: vals }
 		}
 
-		Term::Annotated { term, ty: _ } => {
+		Elaborated::Annotated { term, ty: _ } => {
 			// Type annotation doesn't affect runtime - just evaluate the term
 			evaluate(term, env)
 		}
@@ -146,7 +146,7 @@ mod tests {
 
 	#[test]
 	fn eval_literal() {
-		let term = Term::number(42.0);
+		let term = Elaborated::number(42.0);
 		let result = evaluate(&term, &Env::new());
 		assert!(matches!(result, FlexValue::HostNumber { value } if value == 42.0));
 	}
@@ -154,8 +154,8 @@ mod tests {
 	#[test]
 	fn eval_identity_application() {
 		// (λx. x) 42
-		let id = Term::lambda("x", Term::var(0, "x"));
-		let app = Term::app(id, Term::number(42.0));
+		let id = Elaborated::lambda("x", Elaborated::var(0, "x"));
+		let app = Elaborated::app(id, Elaborated::number(42.0));
 		let result = evaluate(&app, &Env::new());
 		assert!(matches!(result, FlexValue::HostNumber { value } if value == 42.0));
 	}
@@ -163,16 +163,16 @@ mod tests {
 	#[test]
 	fn eval_k_combinator() {
 		// ((λx. λy. x) 1) 2 = 1
-		let k = Term::lambda("x", Term::lambda("y", Term::var(1, "x")));
-		let k1 = Term::app(k, Term::number(1.0));
-		let k1_2 = Term::app(k1, Term::number(2.0));
+		let k = Elaborated::lambda("x", Elaborated::lambda("y", Elaborated::var(1, "x")));
+		let k1 = Elaborated::app(k, Elaborated::number(1.0));
+		let k1_2 = Elaborated::app(k1, Elaborated::number(2.0));
 		let result = evaluate(&k1_2, &Env::new());
 		assert!(matches!(result, FlexValue::HostNumber { value } if value == 1.0));
 	}
 
 	#[test]
 	fn eval_tuple() {
-		let tuple = Term::tuple(vec![Term::number(1.0), Term::number(2.0), Term::number(3.0)]);
+		let tuple = Elaborated::tuple(vec![Elaborated::number(1.0), Elaborated::number(2.0), Elaborated::number(3.0)]);
 		let result = evaluate(&tuple, &Env::new());
 		match result {
 			FlexValue::TupleValue { elements } => {
@@ -184,7 +184,7 @@ mod tests {
 
 	#[test]
 	fn unbound_var_becomes_stuck() {
-		let term = Term::var(99, "unbound");
+		let term = Elaborated::var(99, "unbound");
 		let result = evaluate(&term, &Env::new());
 		assert!(matches!(result, FlexValue::StuckValue(..)));
 	}

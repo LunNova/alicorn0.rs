@@ -39,8 +39,10 @@ impl Goal {
 /// Maps names to Inferrable terms (which may be operatives, functions, or values).
 #[derive(Debug, Clone)]
 pub struct Env {
-	/// Name → Inferrable term bindings
+	/// Name → Inferrable term bindings (for operatives, let-bound values, lambda params, etc.)
 	bindings: HashMap<String, Inferrable>,
+	/// Current lambda nesting depth (used for de Bruijn level assignment)
+	pub depth: usize,
 	/// Typing context for de Bruijn lookups
 	pub typing_context: TypingContext,
 }
@@ -49,6 +51,7 @@ impl Env {
 	pub fn new() -> Self {
 		Self {
 			bindings: HashMap::new(),
+			depth: 0,
 			typing_context: TypingContext::new(),
 		}
 	}
@@ -61,27 +64,26 @@ impl Env {
 		env.bind("let", Inferrable::native_operative(NativeOperative::Let));
 		env.bind("->", Inferrable::native_operative(NativeOperative::Arrow));
 		env.bind("lambda", Inferrable::native_operative(NativeOperative::Lambda));
+		env.bind("fn", Inferrable::native_operative(NativeOperative::AnnotatedLambda));
 		env.bind("forall", Inferrable::native_operative(NativeOperative::Forall));
 		env.bind(":", Inferrable::native_operative(NativeOperative::Annotate));
+
+		// Register primitive types for annotations
+		env.bind("Number", Inferrable::literal(FlexValue::HostNumberType));
+		env.bind("String", Inferrable::literal(FlexValue::HostStringType));
+		env.bind("Bool", Inferrable::literal(FlexValue::HostBoolType));
 
 		env
 	}
 
-	/// Bind a name to a term
+	/// Bind a name to a term (for operatives, let-bindings, lambda params, etc.)
 	pub fn bind(&mut self, name: impl Into<String>, term: Inferrable) {
 		self.bindings.insert(name.into(), term);
 	}
 
-	/// Look up a name
-	pub fn get(&self, name: &str) -> Option<&Inferrable> {
-		self.bindings.get(name)
-	}
-
-	/// Extend environment with a new binding (returns new env)
-	pub fn extend(&self, name: impl Into<String>, term: Inferrable) -> Self {
-		let mut new_env = self.clone();
-		new_env.bind(name, term);
-		new_env
+	/// Look up a name - returns the bound term
+	pub fn get(&self, name: &str) -> Option<Inferrable> {
+		self.bindings.get(name).cloned()
 	}
 
 	/// Push a binding onto the typing context (for de Bruijn)
@@ -149,7 +151,7 @@ pub fn expression(syntax: &FormatList, env: &mut Env, goal: Goal) -> Result<Infe
 	// Try to get the head as a term and infer its type
 	if let Element::Symbol(name) = head {
 		if let Some(head_term) = env.get(name.as_str()) {
-			let head_type = infer(head_term, &env.typing_context)?;
+			let head_type = infer(&head_term, &env.typing_context)?;
 
 			// Check if it's an operative
 			if let Some(operative) = as_operative_type(&head_type) {
@@ -292,6 +294,45 @@ pub fn parse_and_run_with_env(input: &str) -> std::result::Result<(Inferrable, E
 	Ok((term, env))
 }
 
+/// Full pipeline: parse → expression → elaborate → evaluate → value
+///
+/// This is the complete end-to-end execution path:
+/// 1. Parse source text to FormatList
+/// 2. Process block through expression evaluator → Inferrable
+/// 3. Elaborate Inferrable → Elaborated
+/// 4. Evaluate Elaborated → FlexValue
+pub fn run_file(input: &str) -> std::result::Result<FlexValue, Box<dyn std::error::Error>> {
+	use alicorn_terms::{Env as EvalEnv, elaborate, evaluate};
+
+	// Parse
+	let syntax = alicorn_format::format(input)?;
+
+	// Expression evaluation (operatives, etc.)
+	let mut env = Env::with_base_operatives();
+	let inferrable = block(&syntax, &mut env)?;
+
+	// Elaborate
+	let (elaborated, _typ) = elaborate(&inferrable, &env.typing_context)?;
+
+	// Evaluate
+	let value = evaluate(&elaborated, &EvalEnv::new());
+
+	Ok(value)
+}
+
+/// Full pipeline with environment access
+pub fn run_file_with_env(input: &str) -> std::result::Result<(FlexValue, Env), Box<dyn std::error::Error>> {
+	use alicorn_terms::{Env as EvalEnv, elaborate, evaluate};
+
+	let syntax = alicorn_format::format(input)?;
+	let mut env = Env::with_base_operatives();
+	let inferrable = block(&syntax, &mut env)?;
+	let (elaborated, _typ) = elaborate(&inferrable, &env.typing_context)?;
+	let value = evaluate(&elaborated, &EvalEnv::new());
+
+	Ok((value, env))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -350,5 +391,73 @@ mod tests {
 		// Both should be bound
 		assert!(env.get("x").is_some(), "x should be bound");
 		assert!(env.get("y").is_some(), "y should be bound");
+	}
+
+	// ============================================================
+	// Full pipeline integration tests: source → value
+	// ============================================================
+
+	#[test]
+	fn run_literal_number() {
+		let result = run_file("42").unwrap();
+		assert!(
+			matches!(result, FlexValue::HostNumber { value } if value == 42.0),
+			"Expected 42.0, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_literal_string() {
+		let result = run_file("\"hello\"").unwrap();
+		assert!(
+			matches!(&result, FlexValue::HostString { value } if value == "hello"),
+			"Expected 'hello', got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_identity_lambda() {
+		// (fn (x : Number) x) 42 → 42
+		let result = run_file("(fn (x : Number) x) 42").unwrap();
+		assert!(
+			matches!(result, FlexValue::HostNumber { value } if value == 42.0),
+			"Expected 42.0, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_let_in_expression() {
+		// let x = 5 in x → 5
+		let result = run_file("let x = 5 in x").unwrap();
+		assert!(
+			matches!(result, FlexValue::HostNumber { value } if value == 5.0),
+			"Expected 5.0, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_nested_let() {
+		// let x = 5 in (let y = 10 in x)  → 5
+		let result = run_file("let x = 5 in (let y = 10 in x)").unwrap();
+		assert!(
+			matches!(result, FlexValue::HostNumber { value } if value == 5.0),
+			"Expected 5.0, got {:?}",
+			result
+		);
+	}
+
+	#[test]
+	fn run_k_combinator() {
+		// ((fn (x : Number) (fn (y : Number) x)) 1) 2 → 1
+		let result = run_file("((fn (x : Number) (fn (y : Number) x)) 1) 2").unwrap();
+		assert!(
+			matches!(result, FlexValue::HostNumber { value } if value == 1.0),
+			"Expected 1.0, got {:?}",
+			result
+		);
 	}
 }
