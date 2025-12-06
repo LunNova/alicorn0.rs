@@ -1,0 +1,14 @@
+[package]
+name = "alicorn-terms"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors = ["Fundament Software SPC <https://fundament.software>"]
+license = "Apache-2.0"
+description = "Term types for Alicorn"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+pattern-wishcast = "0.0.1-pre.3"

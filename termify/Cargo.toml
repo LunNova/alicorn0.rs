@@ -1,0 +1,19 @@
+[package]
+name = "alicorn-termify"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors = ["Fundament Software SPC <https://fundament.software>"]
+license = "Apache-2.0"
+description = "FormatList to Term conversion for Alicorn"
+
+[lib]
+path = "lib.rs"
+
+[dependencies]
+alicorn-format = { path = "../format" }
+alicorn-terms = { path = "../terms" }
+format-macro = { path = "../format-macro" }
+imbl = "3.0"
+
+[dev-dependencies]
